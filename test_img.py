@@ -1,12 +1,18 @@
+import sys
+
+if len(sys.argv) < 3:
+    print("Provide image to analyse, and size (N) of colour map (NxN)")
+    sys.exit(-1)
+if not sys.argv[2].isnumeric():
+    print("Second argument should be a number.")
+    sys.exit(-1)
+
 from PIL import Image
 from torchvision import transforms
 from ksom import SOM, nb_linear
 import pygame
 import torch
-import sys
 import time
-
-# BUG :: not working well when xs different from ys
 
 screen_size=600
 som_size = int(sys.argv[2])
