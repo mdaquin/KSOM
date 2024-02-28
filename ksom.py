@@ -1,21 +1,31 @@
-### Self-organising map pytroch model and optimiser.
+### Self-organising map pytroch model
 import torch
 import math
 import numpy as np
 
-def euclidean_distance(x,y): return torch.cdist(x,y,2)
+def euclidean_distance(x,y):
+    """returns a distance matrix between the elements of
+    the tensor x and the ones of the tensor y"""
+    return torch.cdist(x,y,2)
 
 # def nb_mexican_hat(node1, node2, nb): pass # TODO 
 
 # def nb_gaussian(node1, node2, nb): pass # TODO
 
-# old non-batch version
 def nb_linear_o(node1, node2, nb):
+    """deprecated non-batch versoin of the linear
+    neighborhood function"""
     if node1[0] == node2[0] and node1[1] == node2[1]: return 1.0
-    dist = euclidean_distance(node1.view(-1, 2).to(torch.float32), node2.view(-1, 2).to(torch.float32))[0][0]
+    dist = euclidean_distance(node1.view(-1, 2).to(torch.float32),
+                              node2.view(-1, 2).to(torch.float32))[0][0]
     return max(0,1-(dist/nb))
 
 def nb_linear(node, dims, coord, nb):
+    """linear neighborhood distances between node (x,y) 
+    and all the coordinates in the tensor coord ([(x,y)]) assuming
+    it follow the dimensions in dims (height, width).
+    nb is the neighborhood radius (i.e. the distance after which 
+    the function returns 0."""
     nodes = node.repeat(dims[0]*dims[1], 1)
     dist = torch.nn.functional.pairwise_distance(nodes, coord)
     dist[int(node[0]*dims[0])+node[1]%dims[0]] = 0.0
@@ -25,7 +35,10 @@ def nb_linear(node, dims, coord, nb):
 
 class SOM(torch.nn.Module):
 
-    def __init__(self, xs, ys, dim, dist=euclidean_distance, alpha_init=1e-3, alpha_drate=1e-6, neighborhood_init=None, neighborhood_fct=nb_linear, neighborhood_drate=1e-6):
+    def __init__(self, xs, ys, dim,
+                 dist=euclidean_distance,
+                 alpha_init=1e-3, alpha_drate=1e-6,
+                 neighborhood_init=None, neighborhood_fct=nb_linear, neighborhood_drate=1e-6):
         super(SOM, self).__init__()
         self.somap = torch.randn(xs*ys, dim)
         self.xs = xs
@@ -55,7 +68,7 @@ class SOM(torch.nn.Module):
     def add(self, x):
         prev_som = self.somap.clone().detach()
         for x_k in x:
-            # decrease linearly...
+            # decreases linearly...
             nb = max(self.neighborhood_drate, self.neighborhood_init - (self.step*self.neighborhood_drate))
             alpha = max(self.alpha_drate, self.alpha_init - (self.step*self.alpha_drate))
             self.step += 1
@@ -63,6 +76,9 @@ class SOM(torch.nn.Module):
             theta = nb_linear(bmu, (self.xs, self.ys), self.coord, nb)
             ntheta = theta.view(-1, theta.size(0)).T
             self.somap = self.somap + ntheta*(alpha*(x_k-self.somap))
+            # old non batch (slow) version
+            # batch here means calculating the whole map at once,
+            # not having a batch of values treated at once. 
             # for i, w_i in enumerate(self.somap):
             #      i2 = self.__1DIndexTo2DIndex(i)
             #      theta = self.neighborhood_fct(bmu, i2, nb)                
