@@ -9,7 +9,7 @@ if not sys.argv[2].isnumeric():
 
 from PIL import Image
 from torchvision import transforms
-from ksom import SOM, nb_linear
+from ksom import SOM, nb_linear, nb_gaussian, nb_ricker
 import pygame
 import torch
 import time
@@ -44,7 +44,9 @@ perm = torch.randperm(x.size(0))
 
 # init SOM model
 som_size = int(sys.argv[2]) # size of som (square, so som_size x som_size)
-smodel = SOM(som_size, som_size, 3, alpha_init=0.01, alpha_drate=1e-7, neighborhood_fct=nb_linear, neighborhood_init=som_size, neighborhood_drate=0.0001)
+smodel = SOM(som_size, som_size, 3,
+             alpha_init=0.01, alpha_drate=1e-7,
+             neighborhood_fct=nb_gaussian, neighborhood_init=som_size, neighborhood_drate=0.001)
 
 # train (1 pass through all the pixels) by batches of 100 pixels
 for i in range(int(x.size()[0]/100)):

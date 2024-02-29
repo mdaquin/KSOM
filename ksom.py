@@ -8,9 +8,37 @@ def euclidean_distance(x,y):
     the tensor x and the ones of the tensor y"""
     return torch.cdist(x,y,2)
 
-# def nb_mexican_hat(node1, node2, nb): pass # TODO 
+def nb_ricker(node, dims, coord, nb):
+    """
+    Ricker wavelet (mexican hat) neighborhood weights between between node (x,y) 
+    and all the coordinates in the tensor coord ([(x,y)]) assuming
+    it follow the dimensions in dims (height, width).
+    nb is the neighborhood radius (i.e. the distance after which 
+    the function returns 0.
+    """
+    nodes = node.repeat(dims[0]*dims[1], 1)
+    dist = torch.nn.functional.pairwise_distance(nodes, coord)
+    dist[int(node[0]*dims[0])+node[1]%dims[0]] = 0.0
+    FM = (math.sqrt(6)/(math.pi*(2*nb)))/math.sqrt(3)
+    fbit = (1-2*math.pi**2*FM**2*dist**2)
+    sbit = -math.pi**2*FM**2*dist**2
+    return fbit*torch.exp(sbit)
 
-# def nb_gaussian(node1, node2, nb): pass # TODO
+def nb_gaussian(node, dims, coord, nb):
+    """
+    Gaussian neighborhood weights between between node (x,y) 
+    and all the coordinates in the tensor coord ([(x,y)]) assuming
+    it follow the dimensions in dims (height, width).
+    nb is the neighborhood radius (i.e. the distance after which 
+    the function returns 0).    
+    """
+    # exp(-(x/(nb/2))**2)
+    nodes = node.repeat(dims[0]*dims[1], 1)
+    dist = torch.nn.functional.pairwise_distance(nodes, coord)
+    dist[int(node[0]*dims[0])+node[1]%dims[0]] = 0.0
+    ret = torch.exp(-(dist/(nb/2))**2)
+    ret[ret < 0] = 0.0
+    return ret    
 
 def nb_linear_o(node1, node2, nb):
     """deprecated non-batch versoin of the linear
@@ -25,7 +53,7 @@ def nb_linear(node, dims, coord, nb):
     and all the coordinates in the tensor coord ([(x,y)]) assuming
     it follow the dimensions in dims (height, width).
     nb is the neighborhood radius (i.e. the distance after which 
-    the function returns 0."""
+    the function returns 0)."""
     nodes = node.repeat(dims[0]*dims[1], 1)
     dist = torch.nn.functional.pairwise_distance(nodes, coord)
     dist[int(node[0]*dims[0])+node[1]%dims[0]] = 0.0
@@ -73,7 +101,7 @@ class SOM(torch.nn.Module):
             alpha = max(self.alpha_drate, self.alpha_init - (self.step*self.alpha_drate))
             self.step += 1
             bmu = self(x_k.view(-1, x_k.size()[0]))[0][0]
-            theta = nb_linear(bmu, (self.xs, self.ys), self.coord, nb)
+            theta = self.neighborhood_fct(bmu, (self.xs, self.ys), self.coord, nb)
             ntheta = theta.view(-1, theta.size(0)).T
             self.somap = self.somap + ntheta*(alpha*(x_k-self.somap))
             # old non batch (slow) version
