@@ -1,4 +1,6 @@
-### Self-organising map pytroch model
+# Self-organising map pytroch model.
+# Author: Mathieu d'Aquin
+
 import torch
 import math
 import numpy as np
@@ -62,13 +64,43 @@ def nb_linear(node, dims, coord, nb):
     return ret
 
 class SOM(torch.nn.Module):
+    """
+    Model for a self-organising map (Kohonen map), which is trained by adding data points that will make the map adapt. The general principle for the training is that each point is matched to the closest unit (using the euclidean distance). The weights of this best matching unit (BMU) are then updated to move closer to the input data point (to a rate dependent on the learning rate, alpha). Neighboring units are also updated, to a lesser extent, depending on the neighborhood function and radius. The learning rate and the neighborhood radius decay over time (provided input points). 
 
+Parameters:
+-----------
+
+xs: vertical size of the map
+
+ys: horizontal size of the map
+
+dist (default: ksom.euclidean_distance): the fonction to identify the best matching unit (BMU). This takes two 2D vectors and returns a 2D matrix of the distances between them. 
+
+zero_init (default: False): Whether the map is initialised randomly, or by zero vectors. 
+
+alpha_init (default: 1e-3): initial value of learning rate.
+
+alpha_drate (default: 1e-6): decay rate of the learning rate. The learning rate (alpha) decreases linearly based on this rate for each new data point, until it reaches the valyue of alpha_drate. 
+
+neightborgood_init (default: half of the smallest dimension of the map): the initial radius of the neighborhood.
+
+neighborhood_fct (default: ksom.nb_gaussian, other values: nb_linear, nb_ricker): the function to get the neighborhood rate depending on the neighborhood rate and the euclidean distance between units. 
+
+neighborhood_drate (default: 1e-6): rate of decay of the neigtborhood radius. This will decrease linearly from neighborhood_init to neighborhood_drate depending on neighborhood_drate.
+
+Example:  
+--------
+
+See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the use of KSOM to build a map of the pixel colors of an image. 
+    """
+    
     def __init__(self, xs, ys, dim,
-                 dist=euclidean_distance,
+                 dist=euclidean_distance, zero_init=False, 
                  alpha_init=1e-3, alpha_drate=1e-6,
-                 neighborhood_init=None, neighborhood_fct=nb_linear, neighborhood_drate=1e-6):
+                 neighborhood_init=None, neighborhood_fct=nb_gaussian, neighborhood_drate=1e-6):
         super(SOM, self).__init__()
         self.somap = torch.randn(xs*ys, dim)
+        if zero_init: self.somap[:,:] = 0
         self.xs = xs
         self.ys = ys
         self.dist = dist
@@ -84,6 +116,19 @@ class SOM(torch.nn.Module):
         self.coord = torch.stack((lx,ly), -1)
         
     def forward(self, x):
+        """
+        Identifies the best matching unit for the data points in x in the current map.
+
+        Parameter:
+        ----------
+
+        x: 2D tensor (N, dim) corresponding to N data points of dimension dim. 
+
+        Returns:
+        --------
+
+        Returns a tuple including the coordinates of the bmu in the current map and the distance matrix used to find it.
+        """
         dists = self.dist(self.somap, x)
         bmu_ind = dists.min(dim=0).indices
         bmu_ind_x = (bmu_ind/self.xs).to(torch.int32)
@@ -94,6 +139,19 @@ class SOM(torch.nn.Module):
         return torch.Tensor([int(ind/self.xs), ind%self.xs])
     
     def add(self, x):
+        """
+        Add the data points in x to the current map and update the map to those points (training). 
+
+        Parameters:
+        -----------
+
+        x: 2D tensor (N, dim) corresponding to N data points of dimension dim. 
+
+        Returns:
+        --------
+
+        Returns the euclidean distance of the SOM's matrix before and after training. Gives an indication of the impact of the added training points on the map.
+        """
         prev_som = self.somap.clone().detach()
         for x_k in x:
             # decreases linearly...

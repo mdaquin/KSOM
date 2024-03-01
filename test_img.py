@@ -44,7 +44,7 @@ perm = torch.randperm(x.size(0))
 
 # init SOM model
 som_size = int(sys.argv[2]) # size of som (square, so som_size x som_size)
-smodel = SOM(som_size, som_size, 3,
+smodel = SOM(som_size, som_size, 3, zero_init=False,
              alpha_init=0.01, alpha_drate=1e-7,
              neighborhood_fct=nb_gaussian, neighborhood_init=som_size, neighborhood_drate=0.001)
 
