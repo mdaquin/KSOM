@@ -98,19 +98,23 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
                  dist=euclidean_distance, zero_init=False, 
                  alpha_init=1e-3, alpha_drate=1e-6,
                  neighborhood_init=None, neighborhood_fct=nb_gaussian, neighborhood_drate=1e-6):
+        if type(xs) != int or type(ys) != int or type(dim) != int: raise TypeError("size and dimension of SOM should be int")
+        if alpha_init <= alpha_drate: raise ValueError("Decay rate of learning rate (alpha_drate) should be smaller than initial value (alpha_init)")
+        if neighborhood_init is None: self.neighborhood_init = min(xs,ys)/2 # start with half the map
+        else: self.neighborhood_init = neighborhood_init
+        if neighborhood_init <= neighborhood_drate: raise ValueError("Neighborhood radius decay rate should (neighborhood_drate) should be smaller than initial value (neighborhood_init)")
         super(SOM, self).__init__()
         self.somap = torch.randn(xs*ys, dim)
         if zero_init: self.somap[:,:] = 0
         self.xs = xs
         self.ys = ys
+        self.dim = dim
         self.dist = dist
         self.step = 0
         self.neighborhood_drate = neighborhood_drate
         self.neighborhood_fct = neighborhood_fct
         self.alpha_init  = alpha_init
         self.alpha_drate = alpha_drate
-        if neighborhood_init is None: self.neighborhood_init = min(xs,ys)/2 # start with half the map
-        else: self.neighborhood_init = neighborhood_init
         lx = torch.arange(xs).repeat(ys).view(-1, ys).T.reshape(xs*ys)
         ly = torch.arange(ys).repeat(xs)
         self.coord = torch.stack((lx,ly), -1)
@@ -129,6 +133,9 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
 
         Returns a tuple including the coordinates of the bmu in the current map and the distance matrix used to find it.
         """
+        if type(x) != torch.Tensor: raise TypeError("x should be a tensor of shape (N,dim)")
+        if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
+        if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")        
         dists = self.dist(self.somap, x)
         bmu_ind = dists.min(dim=0).indices
         bmu_ind_x = (bmu_ind/self.xs).to(torch.int32)
@@ -152,6 +159,9 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
 
         Returns the euclidean distance of the SOM's matrix before and after training. Gives an indication of the impact of the added training points on the map.
         """
+        if type(x) != torch.Tensor: raise TypeError("x should be a tensor of shape (N,dim)")
+        if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
+        if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
         prev_som = self.somap.clone().detach()
         for x_k in x:
             # decreases linearly...
