@@ -20,6 +20,10 @@ pygame.init()
 surface = pygame.display.set_mode((screen_size,screen_size))
 
 def display(smodel):
+    for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
     unit = int(screen_size/som_size)
     for i,cs in enumerate(smodel.somap):
         x = int(i/som_size)
@@ -32,8 +36,8 @@ def display(smodel):
         pygame.draw.rect(surface,
                          color,
                          pygame.Rect(x, y, unit, unit))
-        pygame.display.flip()
-
+    pygame.display.flip()
+    pygame.display.update()
 
 # open image, transform into tensor, and create shuffle index
 im= Image.open(sys.argv[1])
@@ -55,7 +59,13 @@ for i in range(int(x.size()[0]/100)):
     dist = smodel.add(x[idx])
     print((i+1)*100,"-", dist, "-", round(((time.time()-time1)*1000), 2), "ms")
     display(smodel)
-
+    
 # continue to keep the display alive
-while True: time.sleep(10)  
-
+while True:
+    for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()    
+    time.sleep(0.1)
+    pygame.display.flip()    
+    pygame.display.update()
