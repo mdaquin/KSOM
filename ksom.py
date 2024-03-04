@@ -118,6 +118,11 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         lx = torch.arange(xs).repeat(ys).view(-1, ys).T.reshape(xs*ys)
         ly = torch.arange(ys).repeat(xs)
         self.coord = torch.stack((lx,ly), -1)
+
+    def to(self, device):
+        super(SOM, self).to(device)
+        self.somap = self.somap.to(device)
+        self.coord = self.coord.to(device)
         
     def forward(self, x):
         """
@@ -135,7 +140,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         """
         if type(x) != torch.Tensor: raise TypeError("x should be a tensor of shape (N,dim)")
         if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
-        if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")        
+        if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
         dists = self.dist(self.somap, x)
         bmu_ind = dists.min(dim=0).indices
         bmu_ind_x = (bmu_ind/self.xs).to(torch.int32)

@@ -1,0 +1,4 @@
+pillow==10.2.0
+pygame==2.5.2
+torch==2.2.1
+torchvision==0.17.1
