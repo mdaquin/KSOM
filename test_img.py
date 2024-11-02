@@ -62,12 +62,12 @@ if torch.cuda.is_available():
     smodel.to(device)
     print("Running on CUDA")
 
-# train (1 pass through all the pixels) by batches of 100 pixels
-for i in range(int(x.size()[0]/100)):
-    idx = perm[i*100:(i+1)*100]
+# train (1 pass through all the pixels) by batches of 1000 pixels
+for i in range(int(x.size()[0]/1000)):
+    idx = perm[i*1000:(i+1)*1000]
     time1 = time.time()
     dist = smodel.add(x[idx])
-    print((i+1)*100,"-", dist, "-", round(((time.time()-time1)*1000), 2), "ms")
+    print(f"{(i+1):06d}K - {dist:.4f} - {(time.time()-time1)*1000:05.2f}ms")
     if disp: display(smodel)
     
 # continue to keep the display alive

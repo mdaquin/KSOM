@@ -96,15 +96,20 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
     
     def __init__(self, xs, ys, dim,
                  dist=euclidean_distance, zero_init=False, 
-                 alpha_init=1e-3, alpha_drate=1e-6,
-                 neighborhood_init=None, neighborhood_fct=nb_gaussian, neighborhood_drate=1e-6):
+                 alpha_init=1e-2, alpha_drate=1e-6,
+                 neighborhood_init=None, neighborhood_fct=nb_gaussian, neighborhood_drate=1e-6, 
+                 minval=None, maxval=None, device="cpu"):
         if type(xs) != int or type(ys) != int or type(dim) != int: raise TypeError("size and dimension of SOM should be int")
         if alpha_init <= alpha_drate: raise ValueError("Decay rate of learning rate (alpha_drate) should be smaller than initial value (alpha_init)")
         if neighborhood_init is None: self.neighborhood_init = min(xs,ys)/2 # start with half the map
         else: self.neighborhood_init = neighborhood_init
         if neighborhood_init <= neighborhood_drate: raise ValueError("Neighborhood radius decay rate should (neighborhood_drate) should be smaller than initial value (neighborhood_init)")
         super(SOM, self).__init__()
-        self.somap = torch.randn(xs*ys, dim)
+        self.somap = torch.randn(xs*ys, dim).to(device)
+        #if minval is not None and maxval is not None:
+        #    self.somap = (self.somap - minval) / (maxval - minval)
+        self.minval = minval
+        self.maxval = maxval
         if zero_init: self.somap[:,:] = 0
         self.xs = xs
         self.ys = ys
@@ -117,7 +122,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         self.alpha_drate = alpha_drate
         lx = torch.arange(xs).repeat(ys).view(-1, ys).T.reshape(xs*ys)
         ly = torch.arange(ys).repeat(xs)
-        self.coord = torch.stack((lx,ly), -1)
+        self.coord = torch.stack((lx,ly), -1).to(device)
 
     def to(self, device):
         super(SOM, self).to(device)
@@ -176,7 +181,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
             bmu = self(x_k.view(-1, x_k.size()[0]))[0][0]
             theta = self.neighborhood_fct(bmu, (self.xs, self.ys), self.coord, nb)
             ntheta = theta.view(-1, theta.size(0)).T
-            self.somap = self.somap + ntheta*(alpha*(x_k-self.somap))
+            self.somap = self.somap + ntheta*(alpha*(x_k-self.somap)) # TODO: shouldn't it be dependent on the dist?
             # old non batch (slow) version
             # batch here means calculating the whole map at once,
             # not having a batch of values treated at once. 
