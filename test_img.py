@@ -1,11 +1,15 @@
 import sys
 
 if len(sys.argv) < 3:
-    print("Provide image to analyse, and size (N) of colour map (NxN)")
-    sys.exit(-1)
-if not sys.argv[2].isnumeric():
-    print("Second argument should be a number.")
-    sys.exit(-1)
+     print("No image or map size provided, default parameters (chica.jpg, 6) will be used.")
+     img = "chica.jpg"
+     som_size = 6
+else: 
+    img = sys.argv[1]
+    if not sys.argv[2].isnumeric():
+        print("Second argument should be a number.")
+        sys.exit(-1)
+    som_size = int(sys.argv[2])
 disp = True
 if len(sys.argv) >=4: disp = sys.argv[3] != "nodisplay"
     
@@ -43,17 +47,16 @@ def display(smodel):
     pygame.display.update()
 
 # open image, transform into tensor, and create shuffle index
-im= Image.open(sys.argv[1])
+im= Image.open(img)
 x= transforms.ToTensor()(im)
 x = x[:-1] if x.size(0) == 4 else x # remove alpha layer if there is one
 x = x.view(-1, x.size()[1]*x.size()[2]).transpose(0,1)
 perm = torch.randperm(x.size(0))
 
 # init SOM model
-som_size = int(sys.argv[2]) # size of som (square, so som_size x som_size)
-smodel = SOM(som_size, som_size, 3, zero_init=False,
+smodel = SOM(som_size, som_size, 3, zero_init=True,
              alpha_init=0.01, alpha_drate=1e-7,
-             neighborhood_fct=nb_gaussian, neighborhood_init=som_size, neighborhood_drate=0.0001)
+             neighborhood_fct=nb_gaussian, neighborhood_init=som_size/2, neighborhood_drate=0.00001)
 
 device = "cpu"
 if torch.cuda.is_available():

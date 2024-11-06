@@ -10,6 +10,7 @@ def euclidean_distance(x,y):
     the tensor x and the ones of the tensor y"""
     return torch.cdist(x,y,2)
 
+# TODO: #13 this does not seem to work...
 def nb_ricker(node, dims, coord, nb):
     """
     Ricker wavelet (mexican hat) neighborhood weights between between node (x,y) 
@@ -110,7 +111,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         #    self.somap = (self.somap - minval) / (maxval - minval)
         self.minval = minval
         self.maxval = maxval
-        if zero_init: self.somap[:,:] = 0
+        if zero_init: self.somap = torch.zeros((xs*ys, dim), dtype=torch.float).to(device)
         self.xs = xs
         self.ys = ys
         self.dim = dim
