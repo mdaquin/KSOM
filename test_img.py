@@ -37,9 +37,13 @@ def display(smodel):
         y = i%som_size
         x = x*unit
         y = y*unit
-        color = (max(min(255, int(cs[0]*255)), 0),
-                 max(min(255, int(cs[1]*255)), 0),
-                 max(min(255, int(cs[2]*255)), 0))
+        try : 
+            color = (max(min(255, int(cs[0]*255)), 0),
+                     max(min(255, int(cs[1]*255)), 0),
+                     max(min(255, int(cs[2]*255)), 0))
+        except: 
+            print(cs*255)
+            sys.exit(-1)
         pygame.draw.rect(surface,
                          color,
                          pygame.Rect(x, y, unit, unit))
@@ -55,7 +59,7 @@ perm = torch.randperm(x.size(0))
 
 # init SOM model
 smodel = SOM(som_size, som_size, 3, zero_init=True,
-             alpha_init=0.01, alpha_drate=1e-7,
+             alpha_init=0.01, alpha_drate=1e-8,
              neighborhood_fct=nb_gaussian, neighborhood_init=som_size/2, neighborhood_drate=0.00001)
 
 device = "cpu"

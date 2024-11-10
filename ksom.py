@@ -17,8 +17,9 @@ def nb_ricker(node, dims, coord, nb):
     and all the coordinates in the tensor coord ([(x,y)]) assuming
     it follow the dimensions in dims (height, width).
     nb is the neighborhood radius (i.e. the distance after which 
-    the function returns 0.
+    the function returns 0).
     """
+    # if nb < 1.0: nb = 1.0 # seem to make no difference...
     nodes = node.repeat(dims[0]*dims[1], 1)
     dist = torch.nn.functional.pairwise_distance(nodes, coord)
     dist[int(node[0]*dims[0])+node[1]%dims[0]] = 0.0
@@ -104,7 +105,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         if alpha_init <= alpha_drate: raise ValueError("Decay rate of learning rate (alpha_drate) should be smaller than initial value (alpha_init)")
         if neighborhood_init is None: self.neighborhood_init = min(xs,ys)/2 # start with half the map
         else: self.neighborhood_init = neighborhood_init
-        if neighborhood_init <= neighborhood_drate: raise ValueError("Neighborhood radius decay rate should (neighborhood_drate) should be smaller than initial value (neighborhood_init)")
+        if self.neighborhood_init <= neighborhood_drate: raise ValueError("Neighborhood radius decay rate should (neighborhood_drate) should be smaller than initial value (neighborhood_init)")
         super(SOM, self).__init__()
         self.somap = torch.randn(xs*ys, dim).to(device)
         #if minval is not None and maxval is not None:
@@ -182,6 +183,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
             bmu = self(x_k.view(-1, x_k.size()[0]))[0][0]
             theta = self.neighborhood_fct(bmu, (self.xs, self.ys), self.coord, nb)
             ntheta = theta.view(-1, theta.size(0)).T
+            # TODO: print(ntheta) prob is that neg ones get to quickly neg and then go to infinity...
             self.somap = self.somap + ntheta*(alpha*(x_k-self.somap)) # TODO: shouldn't it be dependent on the dist?
             # old non batch (slow) version
             # batch here means calculating the whole map at once,
