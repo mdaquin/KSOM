@@ -16,7 +16,7 @@ def cosine_distance(x,y):
     """returns a distance matrix between the elements of 
     the tensor x and the ones of the tensor y"""
     out = CosineSimilarity(dim=1, eps=1e-6)(x,y.repeat(len(x), 1))
-    return out.resize(len(out), 1)
+    return 1-out.resize(len(out), 1)
 
 # TODO: #13 this does not seem to work...
 def nb_ricker(node, dims, coord, nb):
