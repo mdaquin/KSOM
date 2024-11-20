@@ -11,6 +11,7 @@ def euclidean_distance(x,y):
     the tensor x and the ones of the tensor y"""
     return torch.cdist(x,y,2)
 
+# BUG : does not work in batch !!! 
 def cosine_distance(x,y):
     """returns a distance matrix between the elements of 
     the tensor x and the ones of the tensor y"""
