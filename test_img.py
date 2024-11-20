@@ -59,7 +59,7 @@ perm = torch.randperm(x.size(0))
 
 # init SOM model
 smodel = SOM(som_size, som_size, 3, zero_init=True,
-             dist=cosine_distance,
+             # dist=cosine_distance,
              alpha_init=0.01, alpha_drate=1e-8,
              neighborhood_fct=nb_gaussian, neighborhood_init=som_size/2, neighborhood_drate=0.00001)
 
