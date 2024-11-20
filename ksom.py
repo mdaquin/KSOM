@@ -176,6 +176,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
         prev_som = self.somap.clone().detach()
         for x_k in x:
+            if x_k.isnan().any() or x_k.isinf().any(): continue # do not try to add vector containing nans ! 
             # decreases linearly...
             nb = max(self.neighborhood_drate, self.neighborhood_init - (self.step*self.neighborhood_drate))
             alpha = max(self.alpha_drate, self.alpha_init - (self.step*self.alpha_drate))
@@ -184,7 +185,14 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
             theta = self.neighborhood_fct(bmu, (self.xs, self.ys), self.coord, nb)
             ntheta = theta.view(-1, theta.size(0)).T
             # TODO: print(ntheta) prob is that neg ones get to quickly neg and then go to infinity...
-            self.somap = self.somap + ntheta*(alpha*(x_k-self.somap)) # TODO: shouldn't it be dependent on the dist?
+            self.somap = self.somap + ntheta*(alpha*(x_k-self.somap))
+            if torch.isnan(self.somap).any() or torch.isinf(self.somap).any(): 
+                print("*** Nan! ***")
+                print("bmu", bmu)
+                print("theta", theta.min(), theta.max(), theta.mean(), theta.isnan().any())
+                print("ntheta", ntheta.min(), ntheta.max(), ntheta.mean(), ntheta.isnan().any())
+                print("alpha", alpha)
+                print("x_k", x_k.min(), x_k.max(), x_k.mean(), x_k.isnan().any())
             # old non batch (slow) version
             # batch here means calculating the whole map at once,
             # not having a batch of values treated at once. 
