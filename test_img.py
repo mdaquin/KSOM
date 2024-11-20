@@ -73,7 +73,7 @@ if torch.cuda.is_available():
 for i in range(int(x.size()[0]/1000)):
     idx = perm[i*1000:(i+1)*1000]
     time1 = time.time()
-    dist = smodel.add(x[idx])
+    dist,count = smodel.add(x[idx])
     print(f"{(i+1):06d}K - {dist:.4f} - {(time.time()-time1)*1000:05.2f}ms")
     if disp: display(smodel)
     
