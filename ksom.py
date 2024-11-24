@@ -2,6 +2,7 @@
 # Author: Mathieu d'Aquin
 
 import torch
+from torch.nn import CosineSimilarity
 import math
 import numpy as np
 
@@ -10,14 +11,23 @@ def euclidean_distance(x,y):
     the tensor x and the ones of the tensor y"""
     return torch.cdist(x,y,2)
 
+# BUG : does not work in batch !!! 
+def cosine_distance(x,y):
+    """returns a distance matrix between the elements of 
+    the tensor x and the ones of the tensor y"""
+    out = CosineSimilarity(dim=1, eps=1e-6)(x,y.repeat(len(x), 1))
+    return 1-out.resize(len(out), 1)
+
+# TODO: #13 this does not seem to work...
 def nb_ricker(node, dims, coord, nb):
     """
     Ricker wavelet (mexican hat) neighborhood weights between between node (x,y) 
     and all the coordinates in the tensor coord ([(x,y)]) assuming
     it follow the dimensions in dims (height, width).
     nb is the neighborhood radius (i.e. the distance after which 
-    the function returns 0.
+    the function returns 0).
     """
+    # if nb < 1.0: nb = 1.0 # seem to make no difference...
     nodes = node.repeat(dims[0]*dims[1], 1)
     dist = torch.nn.functional.pairwise_distance(nodes, coord)
     dist[int(node[0]*dims[0])+node[1]%dims[0]] = 0.0
@@ -103,14 +113,14 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         if alpha_init <= alpha_drate: raise ValueError("Decay rate of learning rate (alpha_drate) should be smaller than initial value (alpha_init)")
         if neighborhood_init is None: self.neighborhood_init = min(xs,ys)/2 # start with half the map
         else: self.neighborhood_init = neighborhood_init
-        if neighborhood_init <= neighborhood_drate: raise ValueError("Neighborhood radius decay rate should (neighborhood_drate) should be smaller than initial value (neighborhood_init)")
+        if self.neighborhood_init <= neighborhood_drate: raise ValueError("Neighborhood radius decay rate should (neighborhood_drate) should be smaller than initial value (neighborhood_init)")
         super(SOM, self).__init__()
         self.somap = torch.randn(xs*ys, dim).to(device)
-        #if minval is not None and maxval is not None:
-        #    self.somap = (self.somap - minval) / (maxval - minval)
+        if minval is not None and maxval is not None:
+            self.somap = (self.somap + minval) * (maxval - minval)
         self.minval = minval
         self.maxval = maxval
-        if zero_init: self.somap[:,:] = 0
+        if zero_init: self.somap = torch.zeros((xs*ys, dim), dtype=torch.float).to(device)
         if sample_init is not None: 
             if sample_init.shape == self.somap.shape: self.somap = sample_init
             else: raise ValueError("Number of samples provided for initialisation should be the same as number of cells in map;")
@@ -176,7 +186,10 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
         if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
         prev_som = self.somap.clone().detach()
+        count = 0
         for x_k in x:
+            if x_k.isnan().any() or x_k.isinf().any(): continue # do not try to add vector containing nans ! 
+            count+=1
             # decreases linearly...
             nb = max(self.neighborhood_drate, self.neighborhood_init - (self.step*self.neighborhood_drate))
             alpha = max(self.alpha_drate, self.alpha_init - (self.step*self.alpha_drate))
@@ -184,7 +197,15 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
             bmu = self(x_k.view(-1, x_k.size()[0]))[0][0]
             theta = self.neighborhood_fct(bmu, (self.xs, self.ys), self.coord, nb)
             ntheta = theta.view(-1, theta.size(0)).T
-            self.somap = self.somap + ntheta*(alpha*(x_k-self.somap)) # TODO: shouldn't it be dependent on the dist?
+            # TODO: print(ntheta) prob is that neg ones get to quickly neg and then go to infinity...
+            self.somap = self.somap + ntheta*(alpha*(x_k-self.somap))
+            if torch.isnan(self.somap).any() or torch.isinf(self.somap).any(): 
+                print("*** Nan! ***")
+                print("bmu", bmu)
+                print("theta", theta.min(), theta.max(), theta.mean(), theta.isnan().any())
+                print("ntheta", ntheta.min(), ntheta.max(), ntheta.mean(), ntheta.isnan().any())
+                print("alpha", alpha)
+                print("x_k", x_k.min(), x_k.max(), x_k.mean(), x_k.isnan().any())
             # old non batch (slow) version
             # batch here means calculating the whole map at once,
             # not having a batch of values treated at once. 
@@ -194,4 +215,4 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
             #      self.somap[i] = w_i + theta*alpha*(x_k-w_i)
             # print("o nsomap", self.somap)
                 #  wij' = wij + ( n_fct(bmu,ni,nb(s)) * alpha(s) * (x_k - wij) )
-        return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean())
+        return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count

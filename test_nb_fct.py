@@ -3,8 +3,10 @@ import torch
 import time
 
 if len(sys.argv) < 4:
-    print("Provide the name of the neighborhood function to test and the size (N) of map (NxN) and radius of neighborhood function.")
-    sys.exit(-1)
+    print("Provide the name of the neighborhood function to test and the size (N) of map (NxN) and radius of neighborhood function, using default params for now (ricker,20,6)")
+    sys.argv.append("ricker")
+    sys.argv.append("20")
+    sys.argv.append("6")        
 if not sys.argv[2].isnumeric():
     print("Second argument should be a number.")
     sys.exit(-1)
@@ -21,7 +23,7 @@ elif sys.argv[1] == "gaussian":
 elif sys.argv[1] == "ricker":
     fct = nb_ricker      
 else:
-    print("Neighboorhood function should be linear or gaussian")
+    print("Neighboorhood function should be linear, gaussian or ricker")
     sys.exit(-1)
 
 import pygame

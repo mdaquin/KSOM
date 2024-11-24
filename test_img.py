@@ -1,17 +1,21 @@
 import sys
 
 if len(sys.argv) < 3:
-    print("Provide image to analyse, and size (N) of colour map (NxN)")
-    sys.exit(-1)
-if not sys.argv[2].isnumeric():
-    print("Second argument should be a number.")
-    sys.exit(-1)
+     print("No image or map size provided, default parameters (chica.jpg, 6) will be used.")
+     img = "chica.jpg"
+     som_size = 6
+else: 
+    img = sys.argv[1]
+    if not sys.argv[2].isnumeric():
+        print("Second argument should be a number.")
+        sys.exit(-1)
+    som_size = int(sys.argv[2])
 disp = True
 if len(sys.argv) >=4: disp = sys.argv[3] != "nodisplay"
     
 from PIL import Image
 from torchvision import transforms
-from ksom import SOM, nb_linear, nb_gaussian, nb_ricker
+from ksom import SOM, cosine_distance, nb_linear, nb_gaussian, nb_ricker
 if disp: import pygame
 import torch
 import time
@@ -33,9 +37,13 @@ def display(smodel):
         y = i%som_size
         x = x*unit
         y = y*unit
-        color = (max(min(255, int(cs[0]*255)), 0),
-                 max(min(255, int(cs[1]*255)), 0),
-                 max(min(255, int(cs[2]*255)), 0))
+        try : 
+            color = (max(min(255, int(cs[0]*255)), 0),
+                     max(min(255, int(cs[1]*255)), 0),
+                     max(min(255, int(cs[2]*255)), 0))
+        except: 
+            print(cs*255)
+            sys.exit(-1)
         pygame.draw.rect(surface,
                          color,
                          pygame.Rect(x, y, unit, unit))
@@ -43,7 +51,7 @@ def display(smodel):
     pygame.display.update()
 
 # open image, transform into tensor, and create shuffle index
-im= Image.open(sys.argv[1])
+im= Image.open(img)
 x= transforms.ToTensor()(im)
 x = x[:-1] if x.size(0) == 4 else x # remove alpha layer if there is one
 x = x.view(-1, x.size()[1]*x.size()[2]).transpose(0,1)
@@ -67,7 +75,7 @@ if torch.cuda.is_available():
 for i in range(int(x.size()[0]/1000)):
     idx = perm[i*1000:(i+1)*1000]
     time1 = time.time()
-    dist = smodel.add(x[idx])
+    dist,count = smodel.add(x[idx])
     print(f"{(i+1):06d}K - {dist:.4f} - {(time.time()-time1)*1000:05.2f}ms")
     if disp: display(smodel)
     
