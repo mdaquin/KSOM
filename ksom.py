@@ -3,6 +3,7 @@
 
 import torch
 from torch.nn import CosineSimilarity
+from torchmetrics.functional import pairwise_cosine_similarity
 import math
 import numpy as np
 
@@ -11,12 +12,10 @@ def euclidean_distance(x,y):
     the tensor x and the ones of the tensor y"""
     return torch.cdist(x,y,2)
 
-# BUG : does not work in batch !!! 
 def cosine_distance(x,y):
     """returns a distance matrix between the elements of 
     the tensor x and the ones of the tensor y"""
-    out = CosineSimilarity(dim=1, eps=1e-6)(x,y.repeat(len(x), 1))
-    return 1-out.resize(len(out), 1)
+    return 1 - pairwise_cosine_similarity(x,y)
 
 # TODO: #13 this does not seem to work...
 def nb_ricker(node, dims, coord, nb):
