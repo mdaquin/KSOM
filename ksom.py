@@ -83,7 +83,7 @@ xs: vertical size of the map
 
 ys: horizontal size of the map
 
-dist (default: ksom.euclidean_distance): the fonction to identify the best matching unit (BMU). This takes two 2D vectors and returns a 2D matrix of the distances between them. 
+dist (default: ksom.euclidean_distance): the fonction to identify the best matching unit (BMU). This takes two 2D vectors and returns a 2D matrix of the distances between them. Two options are available as part of ksom: euclidean_distance and consine_distance.
 
 zero_init (default: False): Whether the map is initialised randomly, or by zero vectors. 
 
