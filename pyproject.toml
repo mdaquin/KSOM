@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ksom"
+version = "0.9.1"
+authors = [
+  { name="Mathieu d'Aquin", email="mathieu.daquin.w+ksom@gmail.com" },
+]
+description = "Self Organising Maps in pytorch"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/mdaquin/ksom"
+Issues = "https://github.com/mdaquin/ksom/issues"
