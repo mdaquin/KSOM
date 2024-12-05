@@ -1,0 +1,7 @@
+{
+    "somsize": 6,
+    "distance": "cosine",
+    "nfct": "gaussian",
+    "nsize": 6, 
+    "stop": 100
+}
