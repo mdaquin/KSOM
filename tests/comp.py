@@ -20,7 +20,7 @@ import torch
 import time
 
 res = {"dim": [], "ksom cpu":[], "ksom gpu": [], "minisom":[]}
-for dim in range(100, 10100, 100):
+for dim in range(100, 5100, 100):
     x = torch.randn((nsamples,dim))
  
     # init SOM model
@@ -74,5 +74,7 @@ for dim in range(100, 10100, 100):
     res["ksom gpu"].append(tkg)
     res["minisom"].append(tms)
 
-pd.DataFrame(res).set_index("dim").plot()
+df = pd.DataFrame(res).set_index("dim")
+df.to_csv("comp_results.csv")
+df.plot()
 plt.show()
