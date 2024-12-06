@@ -20,15 +20,8 @@ import torch
 import time
 
 res = {"dim": [], "time":[]}
-for dim in range(100, 5100, 100):
+for dim in range(100, 10100, 100):
     x = torch.randn((nsamples,dim))
-    
-    device = "cpu"
-    if sys.argv[2] == "ksom_gpu" and torch.cuda.is_available():
-        device = "cuda:0"
-        x = x.to(device)
-        smodel.to(device)
-        # print("Running on CUDA")
 
     if sys.argv[2] == "ksom_gpu" or sys.argv[2] == "ksom_cpu":
        # init SOM model
@@ -39,6 +32,13 @@ for dim in range(100, 5100, 100):
              neighborhood_init=som_size/2, 
              neighborhood_drate=0.0001
              )
+        
+        device = "cpu"
+        if sys.argv[2] == "ksom_gpu" and torch.cuda.is_available():
+            device = "cuda:0"
+            x = x.to(device)
+            smodel.to(device)
+            # print("Running on CUDA")
 
         time1 = time.time()
         dist,count = smodel.add(x)
