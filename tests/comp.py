@@ -53,7 +53,7 @@ for dim in range(100, 10100, 100):
         device = "cuda:0"
         x = x.to(device)
         smodel.to(device)
-        print("Running on CUDA")
+        # print("Running on CUDA")
 
     time1 = time.time()
     dist,count = smodel.add(x)
