@@ -46,12 +46,11 @@ for dim in range(100, 10100, 100):
         otime = (time.time()-time1)
     
     elif sys.argv[2] == "quicksom_gpu":
-        qsom = quicksom.som.SOM(som_size, som_size, x.shape[1], n_epoch=1)
         device = "cpu"
         if sys.argv[2] == "ksom_gpu " and torch.cuda.is_available():
             device = "cuda:0"
             x = x.to(device)
-            qsom.to(device)
+        qsom = quicksom.som.SOM(som_size, som_size, x.shape[1], n_epoch=1, device=device)
             # print("Running on CUDA")
         # x = x.cpu().numpy()
         time1 = time.time()
