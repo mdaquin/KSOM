@@ -2,11 +2,12 @@ import sys
 import json
 import minisom
 import quicksom.som
+import sklearn_som.som
 import pandas as pd
 import matplotlib.pyplot as plt
 
 if len(sys.argv) != 3:
-     print("provide a test configuration and a library to test (ksom_cpu, ksom_gpu, quicksom_cpu, quicksom_gpu or minisom).")
+     print("provide a test configuration and a library to test (ksom_cpu, ksom_gpu, quicksom_cpu, quicksom_gpu, minisom or sklearn_som).")
      sys.exit(-1)
 
 config = json.load(open(sys.argv[1]))
@@ -61,6 +62,12 @@ for dim in range(100, 10100, 100):
         # x = x.cpu().numpy()
         time1 = time.time()
         qsom.fit(x)
+        otime = (time.time()-time1)
+    elif sys.argv[2] == "sklearn_som":
+        ssom = sklearn_som.som.SOM(som_size, som_size, x.shape[1])
+        x = x.cpu().numpy()
+        time1 = time.time()
+        ssom.fit(x)
         otime = (time.time()-time1)
     elif sys.argv[2] == "minisom":
         msom = minisom.MiniSom(som_size, som_size, dim, 
