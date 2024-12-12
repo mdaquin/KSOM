@@ -77,7 +77,7 @@ screen_size=600 # size of screen
 pygame.init()
 surface = pygame.display.set_mode((screen_size*2,screen_size))
 
-NBEPOCH = 10
+NBEPOCH = 7
 BATCHSIZE = 100
 SOMSIZE = 6
 DIST = ksom.cosine_distance
