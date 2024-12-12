@@ -10,7 +10,7 @@ pip install ksom
 
 An example is available in ``test/test-img.py`` for a simple use case creating a square color map of an image. Having loaded the data in a tensor x, the code to initialise and train the SOM looks like this:
 
-```
+```python
 from ksom import SOM, cosine_distance, nb_gaussian
 ...
 smodel = SOM(6, 6, 3, # size of the map and dimension of units
