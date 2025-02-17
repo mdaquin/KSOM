@@ -3,7 +3,10 @@ import time
 import pandas as pd
 import pygame
 from sklearn.decomposition import PCA
-import ksom
+import sys 
+mypath = "/home/mdaquin/code/KSOM/src/"
+sys.path.insert(0, mypath)
+import ksom.ksom as ksom
 import torch
 import sys
 
@@ -21,7 +24,7 @@ def findLabel(i, map, labels):
 def display(map, xoffset=0, labels=None, label_offset=0):
     if map.shape[1] > 3:
         pca = PCA(n_components=3)
-        somap = pca.fit_transform(map)
+        somap = pca.fit_transform(map.detach())
     else: somap = map
     for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -77,7 +80,7 @@ screen_size=600 # size of screen
 pygame.init()
 surface = pygame.display.set_mode((screen_size*2,screen_size))
 
-NBEPOCH = 7
+NBEPOCH = 20
 BATCHSIZE = 100
 SOMSIZE = 6
 DIST = ksom.cosine_distance
@@ -85,16 +88,19 @@ DIST = ksom.cosine_distance
 pygame.font.init()
 font = pygame.font.SysFont('Courrier',int((screen_size/6)/5))
 
-smodel = ksom.SOM(SOMSIZE, SOMSIZE, 
+smodel = ksom.WSOM(SOMSIZE, SOMSIZE, 
                   len(df.T), 
-                  zero_init=True, 
+                  # zero_init=True, 
                   sample_init=torch.Tensor(df.sample(SOMSIZE*SOMSIZE).to_numpy()),
                   dist=DIST)
 
+
+optimizer = torch.optim.Adam(smodel.parameters(), lr=0.001)
+smodel.train()
 for epoch in range(NBEPOCH):
     for b in range(math.ceil(len(df)/BATCHSIZE)):
-        dist,count = smodel.add(torch.Tensor(df.iloc[b*BATCHSIZE:(b+1)*BATCHSIZE].to_numpy()))
-        print(f"{epoch+1:02d}.{b:02d}: distance {dist:.4f} out of {count} objects")
+        dist,count,loss = smodel.add(torch.Tensor(df.iloc[b*BATCHSIZE:(b+1)*BATCHSIZE].to_numpy()), optimizer)
+        print(f"{epoch+1:02d}.{b:02d}: distance {dist:.6f} out of {count} objects, loss={loss:.6f}")
         freqmap = torch.zeros(SOMSIZE*SOMSIZE)
         bmu,dists = smodel(torch.Tensor(df.to_numpy()))
         for i in bmu: freqmap[i[0]*SOMSIZE+i[1]] += 1
@@ -102,6 +108,10 @@ for epoch in range(NBEPOCH):
         freqmap = freqmap.view(len(freqmap), 1).repeat((1,3))
         display(freqmap, xoffset=screen_size)
         display(smodel.somap, labels=list(df.columns), label_offset=screen_size)
+
+
+for i,c in enumerate(df.columns):
+     print(c, float(smodel.weights[i]))
 
 # continue to keep the display alive
 while True:

@@ -15,9 +15,7 @@ if len(sys.argv) >=4: disp = sys.argv[3] != "nodisplay"
     
 from PIL import Image
 from torchvision import transforms
-mypath = "/home/mdaquin/code/KSOM/src/"
-sys.path.insert(0, mypath)
-from ksom.ksom import SOM, WSOM, cosine_distance, nb_linear, nb_gaussian, nb_ricker
+from ksom.ksom import SOM, cosine_distance, nb_linear, nb_gaussian, nb_ricker
 if disp: import pygame
 import torch
 import time
@@ -61,7 +59,7 @@ perm = torch.randperm(x.size(0))
 
 # init SOM model
 samples = x[perm[-(som_size*som_size):]]
-smodel = WSOM(som_size, som_size, 3, sample_init=samples, # zero_init=False,
+smodel = SOM(som_size, som_size, 3, sample_init=samples, # zero_init=False,
              dist=cosine_distance,
              alpha_init=0.01, alpha_drate=1e-7,
              neighborhood_fct=nb_gaussian, neighborhood_init=som_size, neighborhood_drate=0.0001)
@@ -75,14 +73,12 @@ device = "cpu"
 #    smodel.to(device)
 #    print("Running on CUDA")
 
-optimizer = torch.optim.Adam(smodel.parameters(), lr=0.001)
-
 # train (1 pass through all the pixels) by batches of 1000 pixels
 for i in range(int(x.size()[0]/100)):
     idx = perm[i*100:(i+1)*100]
     time1 = time.time()
-    dist,count,loss = smodel.add(x[idx], optimizer=optimizer)
-    print(f"{((i+1)/10):.1f}K - {dist:.6f} - {loss:.6f} - {(time.time()-time1)*1000:05.2f}ms")
+    dist,count = smodel.add(x[idx])
+    print(f"{((i+1)/10):.1f}K - {dist:.6f} - {(time.time()-time1)*1000:05.2f}ms")
     if disp: display(smodel)
     
 # continue to keep the display alive
