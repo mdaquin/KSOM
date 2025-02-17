@@ -75,7 +75,7 @@ device = "cpu"
 #    smodel.to(device)
 #    print("Running on CUDA")
 
-optimizer = torch.optim.Adam(smodel.parameters(), lr=0.01)
+optimizer = torch.optim.Adam(smodel.parameters(), lr=0.001)
 
 # train (1 pass through all the pixels) by batches of 1000 pixels
 for i in range(int(x.size()[0]/100)):

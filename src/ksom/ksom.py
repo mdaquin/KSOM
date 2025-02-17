@@ -302,8 +302,9 @@ class WSOM(SOM):
                 print("theta", theta.min(), theta.max(), theta.mean(), theta.isnan().any())
                 print("ntheta", ntheta.min(), ntheta.max(), ntheta.mean(), ntheta.isnan().any())
                 print("alpha", alpha)
-                print("x_k", x_k.min(), x_k.max(), x_k.mean(), x_k.isnan().any())
-        loss = torch.min(dists, 0).values.mean() # the basic distance one... 
+                print("x_k", x_k.min(), x_k.max(), x_k.mean(), x_k.isnan().any())        
+        # loss = torch.min(dists, 0).values.mean() # this loss is wrong as F*
+        loss = (1-(torch.min(dists, 0).values/torch.mean(dists, 0))).mean()
         loss.backward() # retain_graph=True) # why the F is this needed? and why does not take more and more time
         optimizer.step()
         print(self.weights)
