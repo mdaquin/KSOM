@@ -3,6 +3,7 @@
 
 import torch
 from torch.nn import CosineSimilarity
+from torch.nn.parameter import Parameter
 from torchmetrics.functional import pairwise_cosine_similarity
 import math
 import numpy as np
@@ -135,6 +136,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         lx = torch.arange(xs).repeat(ys).view(-1, ys).T.reshape(xs*ys)
         ly = torch.arange(ys).repeat(xs)
         self.coord = torch.stack((lx,ly), -1).to(device)
+        self.device = device # so we can have the info in subclasses
 
     def to(self, device):
         super(SOM, self).to(device)
@@ -186,21 +188,22 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
         prev_som = self.somap.clone().detach()
         count = 0
-        for x_k in x:
+        bmus,dists = self(x)  
+        for i, x_k in enumerate(x):
             if x_k.isnan().any() or x_k.isinf().any(): continue # do not try to add vector containing nans ! 
             count+=1
             # decreases linearly...
             nb = max(self.neighborhood_drate, self.neighborhood_init - (self.step*self.neighborhood_drate))
             alpha = max(self.alpha_drate, self.alpha_init - (self.step*self.alpha_drate))
             self.step += 1
-            bmu = self(x_k.view(-1, x_k.size()[0]))[0][0]
-            theta = self.neighborhood_fct(bmu, (self.xs, self.ys), self.coord, nb)
+            # bmu = self(x_k.view(-1, x_k.size()[0]))[0][0]
+            theta = self.neighborhood_fct(bmus[i], (self.xs, self.ys), self.coord, nb)
             ntheta = theta.view(-1, theta.size(0)).T
             # TODO: print(ntheta) prob is that neg ones get to quickly neg and then go to infinity...
             self.somap = self.somap + ntheta*(alpha*(x_k-self.somap))
             if torch.isnan(self.somap).any() or torch.isinf(self.somap).any(): 
                 print("*** Nan! ***")
-                print("bmu", bmu)
+                print("bmu", bmus[i])
                 print("theta", theta.min(), theta.max(), theta.mean(), theta.isnan().any())
                 print("ntheta", ntheta.min(), ntheta.max(), ntheta.mean(), ntheta.isnan().any())
                 print("alpha", alpha)
@@ -215,3 +218,93 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
             # print("o nsomap", self.somap)
                 #  wij' = wij + ( n_fct(bmu,ni,nb(s)) * alpha(s) * (x_k - wij) )
         return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count
+
+
+class WSOM(SOM):
+    def __init__(self, *args, **kwargs):
+        super(WSOM, self).__init__(*args, **kwargs)
+        factory_kwargs = {"device": self.device, "dtype": None}
+        self.weights = Parameter(torch.empty((self.dim), **factory_kwargs))
+        torch.nn.init.uniform_(self.weights)
+        if "sample_init" in kwargs and kwargs["sample_init"] is not None: self.somap = kwargs["sample_init"] * self.weights
+
+    def to(self, device):
+        super(SOM, self).to(device)
+        self.somap = self.somap.to(device)
+        self.coord = self.coord.to(device)
+        self.weights = self.weights.to(device)
+    
+    def forward(self, x):
+        """
+        Identifies the best matching unit for the data points in x in the current map.
+
+        Parameter:
+        ----------
+        
+        x: 2D tensor (N, dim) corresponding to N data points of dimension dim. 
+
+        Returns:
+        --------
+
+        Returns a tuple including the coordinates of the bmu in the current map and the distance matrix used to find it.
+        """
+        if type(x) != torch.Tensor: raise TypeError("x should be a tensor of shape (N,dim)")
+        if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
+        if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
+        wx = x * self.weights
+        dists = self.dist(self.somap, wx)
+        bmu_ind = dists.min(dim=0).indices
+        bmu_ind_x = (bmu_ind/self.xs).to(torch.int32)
+        bmu_ind_y = bmu_ind%self.xs
+        return torch.stack((bmu_ind_x, bmu_ind_y), -1), dists
+    
+
+    def add(self, x, optimizer=None, loss=None):
+        """
+        Add the data points in x to the current map and update the map to those points (training). 
+
+        Parameters:
+        -----------
+
+        x: 2D tensor (N, dim) corresponding to N data points of dimension dim. 
+
+        Returns:
+        --------
+
+        Returns the euclidean distance of the SOM's matrix before and after training. Gives an indication of the impact of the added training points on the map.
+        """
+        if type(x) != torch.Tensor: raise TypeError("x should be a tensor of shape (N,dim)")
+        if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
+        if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
+        prev_som = self.somap.clone().detach()
+        optimizer.zero_grad()
+        self.zero_grad()
+        self.somap.detach_()
+        count = 0
+        bmus, dists = self(x)
+        for i,x_k in enumerate(x):
+            if x_k.isnan().any() or x_k.isinf().any(): continue # do not try to add vector containing nans ! 
+            count+=1
+            # decreases linearly...
+            nb = max(self.neighborhood_drate, self.neighborhood_init - (self.step*self.neighborhood_drate))
+            alpha = max(self.alpha_drate, self.alpha_init - (self.step*self.alpha_drate))
+            self.step += 1
+            #bmu, dist = self(x_k.view(-1, x_k.size()[0]))
+            #bmu = bmu[0]
+            theta = self.neighborhood_fct(bmus[i], (self.xs, self.ys), self.coord, nb)
+            ntheta = theta.view(-1, theta.size(0)).T
+            wx_k = x_k * self.weights
+            # TODO: print(ntheta) prob is that neg ones get to quickly neg and then go to infinity...
+            self.somap = self.somap + ntheta*(alpha*(wx_k-self.somap))
+            if torch.isnan(self.somap).any() or torch.isinf(self.somap).any(): 
+                print("*** Nan! ***")
+                print("bmu", bmus[i])
+                print("theta", theta.min(), theta.max(), theta.mean(), theta.isnan().any())
+                print("ntheta", ntheta.min(), ntheta.max(), ntheta.mean(), ntheta.isnan().any())
+                print("alpha", alpha)
+                print("x_k", x_k.min(), x_k.max(), x_k.mean(), x_k.isnan().any())
+        loss = torch.min(dists, 0).values.mean() # the basic distance one... 
+        loss.backward() # retain_graph=True) # why the F is this needed? and why does not take more and more time
+        optimizer.step()
+        print(self.weights)
+        return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count, loss

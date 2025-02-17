@@ -2,7 +2,7 @@ import sys
 
 if len(sys.argv) < 3:
      print("No image or map size provided, default parameters (chica.jpg, 6) will be used.")
-     img = "chica.jpg"
+     img = "tests/chica.jpg"
      som_size = 6
 else: 
     img = sys.argv[1]
@@ -15,7 +15,9 @@ if len(sys.argv) >=4: disp = sys.argv[3] != "nodisplay"
     
 from PIL import Image
 from torchvision import transforms
-from ksom import SOM, cosine_distance, nb_linear, nb_gaussian, nb_ricker
+mypath = "/home/mdaquin/code/KSOM/src/"
+sys.path.insert(0, mypath)
+from ksom.ksom import SOM, WSOM, cosine_distance, nb_linear, nb_gaussian, nb_ricker
 if disp: import pygame
 import torch
 import time
@@ -59,24 +61,28 @@ perm = torch.randperm(x.size(0))
 
 # init SOM model
 samples = x[perm[-(som_size*som_size):]]
-smodel = SOM(som_size, som_size, 3, sample_init=samples, # zero_init=False,
+smodel = WSOM(som_size, som_size, 3, sample_init=samples, # zero_init=False,
              dist=cosine_distance,
              alpha_init=0.01, alpha_drate=1e-7,
              neighborhood_fct=nb_gaussian, neighborhood_init=som_size, neighborhood_drate=0.0001)
 
+smodel.train()
+
 device = "cpu"
-if torch.cuda.is_available():
-    device = "cuda:0"
-    x = x.to(device)
-    smodel.to(device)
-    print("Running on CUDA")
+#if torch.cuda.is_available():
+#    device = "cuda:0"
+#    x = x.to(device)
+#    smodel.to(device)
+#    print("Running on CUDA")
+
+optimizer = torch.optim.Adam(smodel.parameters(), lr=0.01)
 
 # train (1 pass through all the pixels) by batches of 1000 pixels
-for i in range(int(x.size()[0]/1000)):
-    idx = perm[i*1000:(i+1)*1000]
+for i in range(int(x.size()[0]/100)):
+    idx = perm[i*100:(i+1)*100]
     time1 = time.time()
-    dist,count = smodel.add(x[idx])
-    print(f"{(i+1):06d}K - {dist:.4f} - {(time.time()-time1)*1000:05.2f}ms")
+    dist,count,loss = smodel.add(x[idx], optimizer=optimizer)
+    print(f"{((i+1)/10):.1f}K - {dist:.6f} - {loss:.6f} - {(time.time()-time1)*1000:05.2f}ms")
     if disp: display(smodel)
     
 # continue to keep the display alive
