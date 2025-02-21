@@ -304,8 +304,7 @@ class WSOM(SOM):
                 print("alpha", alpha)
                 print("x_k", x_k.min(), x_k.max(), x_k.mean(), x_k.isnan().any())    
                 print("weights", self.weights)    
-        # loss = torch.min(dists, 0).values.mean() # this loss is wrong as F*
-        loss = (1-(torch.min(dists, 0).values/torch.mean(dists, 0))).mean()
-        loss.backward() # retain_graph=True) # why the F is this needed? and why does not take more and more time
+        loss = (1-(torch.min(dists, 0).values/torch.mean(dists, 0))).mean() # loss = how much smaller is the distance of the bmu compared to avg
+        loss.backward() 
         optimizer.step()
         return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count, loss
