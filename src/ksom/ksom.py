@@ -226,7 +226,7 @@ class WSOM(SOM):
         factory_kwargs = {"device": self.device, "dtype": None}
         # self.weights = Parameter(torch.empty((self.dim), **factory_kwargs))
         self.weights = Parameter(torch.zeros((self.dim), **factory_kwargs) + 1.0)
-        torch.nn.init.uniform_(self.weights)
+        # torch.nn.init.uniform_(self.weights)
         if "sample_init" in kwargs and kwargs["sample_init"] is not None: self.somap = kwargs["sample_init"] * self.weights
 
     def to(self, device):
