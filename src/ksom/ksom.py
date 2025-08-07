@@ -108,7 +108,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
                  dist=euclidean_distance, zero_init=False, sample_init=None,
                  alpha_init=1e-2, alpha_drate=1e-6,
                  neighborhood_init=None, neighborhood_fct=nb_gaussian, neighborhood_drate=1e-6, 
-                 minval=None, maxval=None, device="cpu"):
+                 minval=None, maxval=None, device="cpu", return_dist=False):
         if type(xs) != int or type(ys) != int or type(dim) != int: raise TypeError("size and dimension of SOM should be int")
         if alpha_init <= alpha_drate: raise ValueError("Decay rate of learning rate (alpha_drate) should be smaller than initial value (alpha_init)")
         if neighborhood_init is None: self.neighborhood_init = min(xs,ys)/2 # start with half the map
@@ -137,6 +137,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         ly = torch.arange(ys).repeat(xs)
         self.coord = torch.stack((lx,ly), -1).to(device)
         self.device = device # so we can have the info in subclasses
+        self.return_dist=return_dist
 
     def to(self, device):
         super(SOM, self).to(device)
@@ -217,16 +218,25 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
             #      self.somap[i] = w_i + theta*alpha*(x_k-w_i)
             # print("o nsomap", self.somap)
                 #  wij' = wij + ( n_fct(bmu,ni,nb(s)) * alpha(s) * (x_k - wij) )
+        if self.return_dist: 
+            return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count, float(dists.min(dim=0).values.mean())
         return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count
 
+
+# summary : it seems to work on cars if hi learning rate. 
+# the higher, the more the weights are different, but it
+# seems to be stable and consistent. 
+# not sure anymore if contrastive learning is will worth it, and scarcity seem to be obtained 
+# naturaly. 
+# make it so that we can differentiate centroid (keep centroid)
+# see how we can benchmark... 
+# redo car and cheese with original model
 
 class WSOM(SOM):
     def __init__(self, *args, **kwargs):
         super(WSOM, self).__init__(*args, **kwargs)
         factory_kwargs = {"device": self.device, "dtype": None}
-        # self.weights = Parameter(torch.empty((self.dim), **factory_kwargs))
-        self.weights = Parameter(torch.zeros((self.dim), **factory_kwargs) + 1.0)
-        # torch.nn.init.uniform_(self.weights)
+        self.weights = Parameter(torch.zeros((self.dim), **factory_kwargs) + 1.0) # weights are initialised to 1.0
         if "sample_init" in kwargs and kwargs["sample_init"] is not None: self.somap = kwargs["sample_init"] * self.weights
 
     def to(self, device):
@@ -253,7 +263,7 @@ class WSOM(SOM):
         if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
         if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
         wx = x * self.weights
-        dists = self.dist(self.somap, wx)
+        dists = self.dist(self.somap, wx) # TODO: should keep the centroid instead of the weighted one... and conpute distance of somap*weight
         bmu_ind = dists.min(dim=0).indices
         bmu_ind_x = (bmu_ind/self.xs).to(torch.int32)
         bmu_ind_y = bmu_ind%self.xs
@@ -294,7 +304,7 @@ class WSOM(SOM):
             #bmu = bmu[0]
             theta = self.neighborhood_fct(bmus[i], (self.xs, self.ys), self.coord, nb)
             ntheta = theta.view(-1, theta.size(0)).T
-            wx_k = x_k * self.weights
+            wx_k = x_k * self.weights # TODO: as for forward, update on x so keep the centroid instead of the weighted one...
             # TODO: print(ntheta) prob is that neg ones get to quickly neg and then go to infinity...
             self.somap = self.somap + ntheta*(alpha*(wx_k-self.somap))
             if torch.isnan(self.somap).any() or torch.isinf(self.somap).any(): 
@@ -306,7 +316,13 @@ class WSOM(SOM):
                 print("x_k", x_k.min(), x_k.max(), x_k.mean(), x_k.isnan().any())    
                 print("weights", self.weights)    
         # loss = (1-(torch.min(dists, 0).values/torch.mean(dists, 0))).mean() # loss = how much smaller is the distance of the bmu compared to avg
-        loss = 1- ( (torch.mean(dists, 0) - torch.min(dists, 0).values) / torch.mean(dists, 0) ).mean()
+        loss = 1- ( (torch.mean(dists, 0) - torch.min(dists, 0).values) / torch.mean(dists, 0) ).mean() # TODO : try to use contrastive and sparcity loss
+        # contrastive loss: (1-Y) * (dists**2) + Y * (torch.clamp(1 - dists, min=0)**2)
+        # with Y = 1 if the point similar
+        # if we take Y as distance in the map (normalised by max distance), i.e. distance between the two corners
+        # we only need the first part of the loss
+        # i.e. sum on i (cells) of (1-mapdistance(i,bmu)) * (weighted_centroid_distance(i, bmu)**2)
         loss.backward() 
         optimizer.step()
+        # TODO: should also return the distance between batch and map
         return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count, loss

@@ -9,6 +9,7 @@ sys.path.insert(0, mypath)
 import ksom.ksom as ksom
 import torch
 import sys
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 def remspace(x): return x.replace(", ", ",") if type(x) == str else x
 
@@ -57,34 +58,29 @@ def display(map, xoffset=0, labels=None, label_offset=0):
     pygame.display.flip()
     pygame.display.update()
 
-df = pd.read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/refs/heads/main/data/2024/2024-06-04/cheeses.csv", index_col=0)
-df = df.drop(["url", "producers", "alt_spellings", "synonyms", "fat_content", "calcium_content", "vegetarian", "vegan"], axis=1)
-print(df.columns)
-df = onehotencode(df, "milk")
-df = onehotencode(df, "country")
-df = onehotencode(df, "region")
-df = onehotencode(df, "family")
-df = onehotencode(df, "type")
-df = onehotencode(df, "texture")
-df = onehotencode(df, "rind")
-df = onehotencode(df, "color")
-df = onehotencode(df, "flavor")
-df = onehotencode(df, "aroma")
+df = pd.read_csv("https://mdaquin.github.io/d/cars/all.csv")
+df = df.drop("model", axis=1)
+df = df.drop("brand", axis=1)
+print(df)
+# df = onehotencode(df, "brand")
+df = onehotencode(df, "transmission")
+df = onehotencode(df, "fuelType")
 
-#print(df.aroma.apply(remspace).str.get_dummies(sep=","))
-#df["vegetarian"] = df.vegetarian.apply(lambda x: int(x) if type(x)==bool else x)
-#df["vegan"] = df.vegan.apply(lambda x: int(x) if type(x)==bool else x)
 df = df.dropna()
+# df = df.sample(10000)
+
+scaler = MinMaxScaler()
+df[df.columns] = scaler.fit_transform(df[df.columns])
 
 screen_size=600 # size of screen 
 pygame.init()
 surface = pygame.display.set_mode((screen_size*2,screen_size))
 
-NBEPOCH = 50
-BATCHSIZE = 100
+NBEPOCH = 5
+BATCHSIZE = 256
 SOMSIZE = 10
 DIST = ksom.cosine_distance
-LR = 1e-2
+LR = 1e-3
 alpha = 1e-2
 alpha_drate = 5e-8
 
@@ -96,7 +92,6 @@ smodel = ksom.WSOM(SOMSIZE, SOMSIZE,
                   # zero_init=True, 
                   sample_init=torch.Tensor(df.sample(SOMSIZE*SOMSIZE).to_numpy()),
                   dist=DIST, alpha_drate=alpha_drate, alpha_init=alpha)
-
 
 iweights = {c: float(smodel.weights[i]) for i, c in enumerate(df.columns)}
 # sort weights by value
