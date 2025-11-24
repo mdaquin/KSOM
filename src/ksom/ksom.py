@@ -263,7 +263,7 @@ class WSOM(SOM):
         if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
         if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
         wx = x * self.weights
-        dists = self.dist(self.somap, wx) # TODO: should keep the centroid instead of the weighted one... and conpute distance of somap*weight
+        dists = self.dist(self.somap*self.weights, wx) # TODO: should keep the centroid instead of the weighted one... and conpute distance of somap*weight
         bmu_ind = dists.min(dim=0).indices
         bmu_ind_x = (bmu_ind/self.xs).to(torch.int32)
         bmu_ind_y = bmu_ind%self.xs
@@ -304,9 +304,10 @@ class WSOM(SOM):
             #bmu = bmu[0]
             theta = self.neighborhood_fct(bmus[i], (self.xs, self.ys), self.coord, nb)
             ntheta = theta.view(-1, theta.size(0)).T
-            wx_k = x_k * self.weights # TODO: as for forward, update on x so keep the centroid instead of the weighted one...
+            wx_k = x_k * self.weights # Not used...: as for forward, update on x so keep the centroid instead of the weighted one...
             # TODO: print(ntheta) prob is that neg ones get to quickly neg and then go to infinity...
-            self.somap = self.somap + ntheta*(alpha*(wx_k-self.somap))
+            # self.somap = self.somap + ntheta*(alpha*(wx_k-self.somap))
+            self.somap = self.somap + ntheta*(alpha*(x_k - self.somap))
             if torch.isnan(self.somap).any() or torch.isinf(self.somap).any(): 
                 print("*** Nan! ***")
                 print("bmu", bmus[i])

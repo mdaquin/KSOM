@@ -4,8 +4,7 @@ import pandas as pd
 import pygame
 from sklearn.decomposition import PCA
 import sys 
-mypath = "/home/mdaquin/code/KSOM/src/"
-sys.path.insert(0, mypath)
+sys.path.insert(0, "src/")
 import ksom.ksom as ksom
 import torch
 import sys
@@ -78,9 +77,9 @@ surface = pygame.display.set_mode((screen_size*2,screen_size))
 
 NBEPOCH = 5
 BATCHSIZE = 256
-SOMSIZE = 10
+SOMSIZE = 5
 DIST = ksom.cosine_distance
-LR = 1e-3
+LR = 1e-2
 alpha = 1e-2
 alpha_drate = 5e-8
 
