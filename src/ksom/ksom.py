@@ -269,6 +269,8 @@ class WSOM(SOM):
         bmu_ind_y = bmu_ind%self.xs
         return torch.stack((bmu_ind_x, bmu_ind_y), -1), dists
     
+    def loss(self, dists):
+        return 1- ( (torch.mean(dists, 0) - torch.min(dists, 0).values) / torch.mean(dists, 0) ).mean() # TODO : try to use contrastive and sparcity loss
 
     def add(self, x, optimizer=None, loss=None):
         """
@@ -317,7 +319,9 @@ class WSOM(SOM):
                 print("x_k", x_k.min(), x_k.max(), x_k.mean(), x_k.isnan().any())    
                 print("weights", self.weights)    
         # loss = (1-(torch.min(dists, 0).values/torch.mean(dists, 0))).mean() # loss = how much smaller is the distance of the bmu compared to avg
-        loss = 1- ( (torch.mean(dists, 0) - torch.min(dists, 0).values) / torch.mean(dists, 0) ).mean() # TODO : try to use contrastive and sparcity loss
+        self.last_bmus_ = bmus
+        self.last_dist_ = dists
+        loss = self.loss(dists)
         # contrastive loss: (1-Y) * (dists**2) + Y * (torch.clamp(1 - dists, min=0)**2)
         # with Y = 1 if the point similar
         # if we take Y as distance in the map (normalised by max distance), i.e. distance between the two corners
