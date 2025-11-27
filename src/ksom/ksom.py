@@ -222,22 +222,14 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
             return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count, float(dists.min(dim=0).values.mean())
         return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count
 
-
-# summary : it seems to work on cars if hi learning rate. 
-# the higher, the more the weights are different, but it
-# seems to be stable and consistent. 
-# not sure anymore if contrastive learning is will worth it, and scarcity seem to be obtained 
-# naturaly. 
-# make it so that we can differentiate centroid (keep centroid)
-# see how we can benchmark... 
-# redo car and cheese with original model
-
 class WSOM(SOM):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, sparcity_coeff=1e-3, **kwargs):
         super(WSOM, self).__init__(*args, **kwargs)
         factory_kwargs = {"device": self.device, "dtype": None}
         self.weights = Parameter(torch.zeros((self.dim), **factory_kwargs) + 1.0) # weights are initialised to 1.0
-        if "sample_init" in kwargs and kwargs["sample_init"] is not None: self.somap = kwargs["sample_init"] * self.weights
+        self.sparcity_coeff = sparcity_coeff
+        # if "sample_init" in kwargs and kwargs["sample_init"] is not None: self.somap = kwargs["sample_init"] * self.weights
+        # not needed as weights are 1 and centroids are kept unweighted now... 
 
     def to(self, device):
         super(SOM, self).to(device)
@@ -269,8 +261,13 @@ class WSOM(SOM):
         bmu_ind_y = bmu_ind%self.xs
         return torch.stack((bmu_ind_x, bmu_ind_y), -1), dists
     
-    def loss(self, dists):
-        return 1- ( (torch.mean(dists, 0) - torch.min(dists, 0).values) / torch.mean(dists, 0) ).mean() # TODO : try to use contrastive and sparcity loss
+    def loss(self, dists): 
+        distance_loss = 1- ( (torch.mean(dists, 0) - torch.min(dists, 0).values) / torch.mean(dists, 0) ).mean()
+        # L1_sparcity = torch.sum(torch.abs(self.weights)) # TODO : make it an option 
+        L2_sparcity = torch.sum(self.weights**2) / len(self.weights)
+        # diff_sparcity = -torch.std(self.weights)
+        # total loss is distance loss - spacity loss (we want to maximise spacity,
+        return distance_loss + self.sparcity_coeff * L2_sparcity
 
     def add(self, x, optimizer=None, loss=None):
         """
@@ -331,3 +328,14 @@ class WSOM(SOM):
         optimizer.step()
         # TODO: should also return the distance between batch and map
         return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count, loss
+    
+
+## 
+
+class MCWSOM(WSOM):
+    # TODO: initialise it with n times WSOMs (n being the number of channels)
+    # each WSOMs should have access to the other channels, and have a loss
+    # that corresponds to the one before, + weights distances with weights of other channels
+    # forward returns a list of dists, bmu (per channel)
+    # add does add to each WSOM, and returns dists and loss for each channel.
+    pass 

@@ -79,7 +79,7 @@ screen_size=600 # size of screen
 pygame.init()
 surface = pygame.display.set_mode((screen_size*2,screen_size))
 
-NBEPOCH = 100
+NBEPOCH = 200
 BATCHSIZE = 100
 SOMSIZE = 10
 DIST = ksom.cosine_distance
@@ -94,7 +94,8 @@ smodel = ksom.WSOM(SOMSIZE, SOMSIZE,
                   len(df.T), 
                   # zero_init=True, 
                   sample_init=torch.Tensor(df.sample(SOMSIZE*SOMSIZE).to_numpy()),
-                  dist=DIST, alpha_drate=alpha_drate, alpha_init=alpha)
+                  dist=DIST, alpha_drate=alpha_drate, alpha_init=alpha, 
+                  sparcity_coeff=1e-2)
 
 
 iweights = {c: float(smodel.weights[i]) for i, c in enumerate(df.columns)}

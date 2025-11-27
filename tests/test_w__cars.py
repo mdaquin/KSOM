@@ -90,7 +90,8 @@ smodel = ksom.WSOM(SOMSIZE, SOMSIZE,
                   len(df.T), 
                   # zero_init=True, 
                   sample_init=torch.Tensor(df.sample(SOMSIZE*SOMSIZE).to_numpy()),
-                  dist=DIST, alpha_drate=alpha_drate, alpha_init=alpha)
+                  dist=DIST, alpha_drate=alpha_drate, alpha_init=alpha, 
+                  sparcity_coeff=1e-2)
 
 iweights = {c: float(smodel.weights[i]) for i, c in enumerate(df.columns)}
 # sort weights by value
