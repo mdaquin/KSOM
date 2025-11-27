@@ -13,7 +13,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 def remspace(x): return x.replace(", ", ",") if type(x) == str else x
 
 def onehotencode(df, col):
-    return pd.concat([df, df[col].apply(remspace).str.get_dummies(sep=",")], axis=1).drop(col, axis=1)
+    return pd.concat([df, df[col].apply(remspace).apply(lambda x: str(col[0])+"_"+str(x)).str.get_dummies(sep=",")], axis=1).drop(col, axis=1)
 
 def findLabel(i, map, labels):
      idx = abs(map.mean(dim=0)-map[i]).argmax()
@@ -82,6 +82,7 @@ DIST = ksom.cosine_distance
 LR = 1e-2
 alpha = 1e-2
 alpha_drate = 5e-8
+sparcity_coeff = 1e-2
 
 pygame.font.init()
 font = pygame.font.SysFont('Courrier',int((screen_size/6)/5))
@@ -89,9 +90,9 @@ font = pygame.font.SysFont('Courrier',int((screen_size/6)/5))
 smodel = ksom.WSOM(SOMSIZE, SOMSIZE, 
                   len(df.T), 
                   # zero_init=True, 
-                  sample_init=torch.Tensor(df.sample(SOMSIZE*SOMSIZE).to_numpy()),
+                  sample_init=torch.Tensor(df.sample(SOMSIZE*SOMSIZE, random_state=42).to_numpy()),
                   dist=DIST, alpha_drate=alpha_drate, alpha_init=alpha, 
-                  sparcity_coeff=1e-2)
+                  sparcity_coeff=sparcity_coeff)
 
 iweights = {c: float(smodel.weights[i]) for i, c in enumerate(df.columns)}
 # sort weights by value
