@@ -268,8 +268,23 @@ class WSOM(SOM):
         # diff_sparcity = -torch.std(self.weights)
         # total loss is distance loss - spacity loss (we want to maximise spacity,
         return distance_loss + self.sparcity_coeff * L2_sparcity
+    
+    # TODO : we do not need to do this : 
+    # since the loss can be computed globally in MCWSOM
+    # we can add the similarity component there directly
+    # also, it should be similarity in absolute values of weights, I think.
+    def mcloss(self, dists):
+            # mcloss takes the normal WSOM (based on distances in the WSOM and sparcity of weights)
+            # and adds a loss based on the distance between the weights of the different channels
+            wsom_loss = self.original_loss(dists)
+            channel_loss = 0.0
+            for other in self.other_channels:
+                channel_loss += 1-cosine_distance(self.weights.view(1,-1), other.weights.view(1,-1))[0][0]
+            channel_loss = channel_loss / len(self.other_channels)
+            print(channel_loss)
+            return wsom_loss + self.channel_sim_loss_coef * channel_loss
 
-    def add(self, x, optimizer=None, loss=None):
+    def add(self, x, optimizer=None):
         """
         Add the data points in x to the current map and update the map to those points (training). 
 
@@ -328,14 +343,48 @@ class WSOM(SOM):
         optimizer.step()
         # TODO: should also return the distance between batch and map
         return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count, loss
+
+class MCWSOM(torch.nn.Module):
+    def __init__(self, *args, n_channels=3, channel_sim_loss_coef=1e-3, **kwargs):
+        super(MCWSOM, self).__init__() #*args, **kwargs)
+        self.n_channel = n_channels
+        self.channel_wsoms = torch.nn.ModuleList([WSOM(*args, **kwargs) for _ in range(n_channels)])
+        self.channel_sim_loss_coef = channel_sim_loss_coef
+        # TODO : perturber un peu les poids initiaux pour chaque channel
+        # not needed since the loss is computed in MCWSOM directly
+        for wsom in self.channel_wsoms:
+            wsom.weights = Parameter(wsom.weights + torch.randn_like(wsom.weights)*0.01)
+        #     wsom.other_channels = [cwsom for cwsom in self.channel_wsoms if cwsom != wsom]
+        #     wsom.original_loss = wsom.loss
+        #     wsom.loss = wsom.mcloss # does not seem to be called... 
+        #     wsom.channel_sim_loss_coef = channel_sim_loss_coef
     
+    def to(self, device):
+        for wsom in self.channel_wsoms:
+            wsom.to(device)
+        self.device = device
 
-## 
+    def forward(self, x):
+        channel_results = []
+        for wsom in self.channel_wsoms:
+            channel_results.append(wsom.forward(x))
+        return channel_results
 
-class MCWSOM(WSOM):
-    # TODO: initialise it with n times WSOMs (n being the number of channels)
-    # each WSOMs should have access to the other channels, and have a loss
-    # that corresponds to the one before, + weights distances with weights of other channels
-    # forward returns a list of dists, bmu (per channel)
-    # add does add to each WSOM, and returns dists and loss for each channel.
-    pass 
+    def add(self, x, optimizer=None):
+        gdist, gcount, gloss = 0.0, 0, 0.0
+        for wsom in self.channel_wsoms:
+            dist, count, loss = wsom.add(x, optimizer)
+            gdist += dist
+            gcount += count
+            gloss += loss
+        gloss = gloss / len(self.channel_wsoms)
+        wloss = 0.0
+        for i,wsom in enumerate(self.channel_wsoms):
+            for j,other in enumerate(self.channel_wsoms):
+                if i < j: wloss += (1 - cosine_distance(abs(wsom.weights).view(1,-1), abs(other.weights).view(1,-1))[0][0])
+        wloss = (wloss / (len(self.channel_wsoms)*(len(self.channel_wsoms)-1)))
+        #print(wloss)
+        #print(gloss)
+        gloss += self.channel_sim_loss_coef * wloss
+        return gdist/len(self.channel_wsoms), gcount/len(self.channel_wsoms), gloss       
+     
