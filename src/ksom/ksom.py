@@ -75,7 +75,7 @@ def nb_linear(node, dims, coord, nb):
 
 class SOM(torch.nn.Module):
     """
-    Model for a self-organising map (Kohonen map), which is trained by adding data points that will make the map adapt. The general principle for the training is that each point is matched to the closest unit (using the euclidean distance). The weights of this best matching unit (BMU) are then updated to move closer to the input data point (to a rate dependent on the learning rate, alpha). Neighboring units are also updated, to a lesser extent, depending on the neighborhood function and radius. The learning rate and the neighborhood radius decay over time (provided input points). 
+    Model for a self-organising map (Kohonen map), which is trained by adding data points that will make the map adapt. The general principle for the training is that each point is matched to the closest unit (using the distance function). The weights of this best matching unit (BMU) are then updated to move closer to the input data point (to a rate dependent on the learning rate, alpha). Neighboring units are also updated, to a lesser extent, depending on the neighborhood function and radius. The learning rate and the neighborhood radius decay linearly over time (per input data point).
 
 Parameters:
 -----------
@@ -84,24 +84,34 @@ xs: vertical size of the map
 
 ys: horizontal size of the map
 
-dist (default: ksom.euclidean_distance): the fonction to identify the best matching unit (BMU). This takes two 2D vectors and returns a 2D matrix of the distances between them. Two options are available as part of ksom: euclidean_distance and consine_distance.
+dim: dimension of each unit (must match input data dimension)
 
-zero_init (default: False): Whether the map is initialised randomly, or by zero vectors. 
+dist (default: ksom.euclidean_distance): the function to identify the best matching unit (BMU). This takes two 2D tensors and returns a 2D matrix of the distances between them. Two options are available as part of ksom: euclidean_distance and cosine_distance.
 
-alpha_init (default: 1e-3): initial value of learning rate.
+zero_init (default: False): Whether the map is initialised with zero vectors instead of random values.
 
-alpha_drate (default: 1e-6): decay rate of the learning rate. The learning rate (alpha) decreases linearly based on this rate for each new data point, until it reaches the valyue of alpha_drate. 
+sample_init (default: None): a tensor of shape (xs*ys, dim) to initialise the map from data samples. Overrides zero_init and random initialisation.
 
-neightborgood_init (default: half of the smallest dimension of the map): the initial radius of the neighborhood.
+alpha_init (default: 1e-2): initial value of learning rate.
 
-neighborhood_fct (default: ksom.nb_gaussian, other values: nb_linear, nb_ricker): the function to get the neighborhood rate depending on the neighborhood rate and the euclidean distance between units. 
+alpha_drate (default: 1e-6): decay rate of the learning rate. The learning rate (alpha) decreases linearly based on this rate for each new data point, until it reaches the value of alpha_drate.
 
-neighborhood_drate (default: 1e-6): rate of decay of the neigtborhood radius. This will decrease linearly from neighborhood_init to neighborhood_drate depending on neighborhood_drate.
+neighborhood_init (default: half of the smallest dimension of the map): the initial radius of the neighborhood.
 
-Example:  
+neighborhood_fct (default: ksom.nb_gaussian, other values: nb_linear, nb_ricker): the function to get the neighborhood weights depending on the neighborhood radius and the euclidean distance between units.
+
+neighborhood_drate (default: 1e-6): rate of decay of the neighborhood radius. This will decrease linearly from neighborhood_init to neighborhood_drate depending on neighborhood_drate.
+
+minval, maxval (default: None): if both are provided, the random initialisation is scaled to the range [minval, maxval].
+
+device (default: "cpu"): the device to store the map on ("cpu" or "cuda").
+
+return_dist (default: False): if True, add() returns an additional value with the mean BMU distance for the batch.
+
+Example:
 --------
 
-See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the use of KSOM to build a map of the pixel colors of an image. 
+See https://github.com/mdaquin/KSOM/blob/main/tests/test_img.py for an example of the use of KSOM to build a map of the pixel colours of an image.
     """
     
     def __init__(self, xs, ys, dim,
@@ -109,7 +119,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
                  alpha_init=1e-2, alpha_drate=1e-6,
                  neighborhood_init=None, neighborhood_fct=nb_gaussian, neighborhood_drate=1e-6, 
                  minval=None, maxval=None, device="cpu", return_dist=False):
-        if type(xs) != int or type(ys) != int or type(dim) != int: raise TypeError("size and dimension of SOM should be int")
+        if not isinstance(xs, int) or not isinstance(ys, int) or not isinstance(dim, int): raise TypeError("size and dimension of SOM should be int")
         if alpha_init <= alpha_drate: raise ValueError("Decay rate of learning rate (alpha_drate) should be smaller than initial value (alpha_init)")
         if neighborhood_init is None: self.neighborhood_init = min(xs,ys)/2 # start with half the map
         else: self.neighborhood_init = neighborhood_init
@@ -143,6 +153,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
         super(SOM, self).to(device)
         self.somap = self.somap.to(device)
         self.coord = self.coord.to(device)
+        return self
         
     def forward(self, x):
         """
@@ -158,13 +169,13 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
 
         Returns a tuple including the coordinates of the bmu in the current map and the distance matrix used to find it.
         """
-        if type(x) != torch.Tensor: raise TypeError("x should be a tensor of shape (N,dim)")
+        if not isinstance(x, torch.Tensor): raise TypeError("x should be a tensor of shape (N,dim)")
         if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
         if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
         dists = self.dist(self.somap, x)
         bmu_ind = dists.min(dim=0).indices
-        bmu_ind_x = (bmu_ind/self.xs).to(torch.int32)
-        bmu_ind_y = bmu_ind%self.xs
+        bmu_ind_x = (bmu_ind/self.ys).to(torch.int32)
+        bmu_ind_y = bmu_ind%self.ys
         return torch.stack((bmu_ind_x, bmu_ind_y), -1), dists
 
     def __1DIndexTo2DIndex(self, ind):
@@ -184,7 +195,7 @@ See https://github.com/mdaquin/KSOM/blob/main/test_img.py for an example of the 
 
         Returns the euclidean distance of the SOM's matrix before and after training. Gives an indication of the impact of the added training points on the map.
         """
-        if type(x) != torch.Tensor: raise TypeError("x should be a tensor of shape (N,dim)")
+        if not isinstance(x, torch.Tensor): raise TypeError("x should be a tensor of shape (N,dim)")
         if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
         if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
         prev_som = self.somap.clone().detach()
@@ -232,7 +243,7 @@ class WSOM(SOM):
         # not needed as weights are 1 and centroids are kept unweighted now... 
 
     def to(self, device):
-        super(SOM, self).to(device)
+        super(WSOM, self).to(device)
         self.somap = self.somap.to(device)
         self.coord = self.coord.to(device)
         self.weights = self.weights.to(device)
@@ -251,16 +262,16 @@ class WSOM(SOM):
 
         Returns a tuple including the coordinates of the bmu in the current map and the distance matrix used to find it.
         """
-        if type(x) != torch.Tensor: raise TypeError("x should be a tensor of shape (N,dim)")
+        if not isinstance(x, torch.Tensor): raise TypeError("x should be a tensor of shape (N,dim)")
         if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
         if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
-        wx = x * self.weights
-        dists = self.dist(self.somap*self.weights, wx) # TODO: should keep the centroid instead of the weighted one... and conpute distance of somap*weight
+        wx = x * torch.sigmoid(self.weights) # TODO : check . takes more time to converge, and gives negative weights, but the order is right
+        dists = self.dist(self.somap*torch.sigmoid(self.weights), wx) # TODO: here too.
         bmu_ind = dists.min(dim=0).indices
-        bmu_ind_x = (bmu_ind/self.xs).to(torch.int32)
-        bmu_ind_y = bmu_ind%self.xs
+        bmu_ind_x = (bmu_ind/self.ys).to(torch.int32)
+        bmu_ind_y = bmu_ind%self.ys
         return torch.stack((bmu_ind_x, bmu_ind_y), -1), dists
-    
+
     def loss(self, dists): 
         distance_loss = 1- ( (torch.mean(dists, 0) - torch.min(dists, 0).values) / torch.mean(dists, 0) ).mean()
         # L1_sparcity = torch.sum(torch.abs(self.weights)) # TODO : make it an option 
@@ -268,123 +279,118 @@ class WSOM(SOM):
         # diff_sparcity = -torch.std(self.weights)
         # total loss is distance loss - spacity loss (we want to maximise spacity,
         return distance_loss + self.sparcity_coeff * L2_sparcity
-    
-    # TODO : we do not need to do this : 
-    # since the loss can be computed globally in MCWSOM
-    # we can add the similarity component there directly
-    # also, it should be similarity in absolute values of weights, I think.
-    def mcloss(self, dists):
-            # mcloss takes the normal WSOM (based on distances in the WSOM and sparcity of weights)
-            # and adds a loss based on the distance between the weights of the different channels
-            wsom_loss = self.original_loss(dists)
-            channel_loss = 0.0
-            for other in self.other_channels:
-                channel_loss += 1-cosine_distance(self.weights.view(1,-1), other.weights.view(1,-1))[0][0]
-            channel_loss = channel_loss / len(self.other_channels)
-            print(channel_loss)
-            return wsom_loss + self.channel_sim_loss_coef * channel_loss
 
-    def add(self, x, optimizer=None):
+    def add(self, x, optimizer=None, step=True):
         """
-        Add the data points in x to the current map and update the map to those points (training). 
+        Add the data points in x to the current map and update the map to those points (training).
 
         Parameters:
         -----------
 
-        x: 2D tensor (N, dim) corresponding to N data points of dimension dim. 
+        x: 2D tensor (N, dim) corresponding to N data points of dimension dim.
+
+        optimizer: a pytorch optimizer for the weights parameter.
+
+        step (default: True): if True, performs optimizer zero_grad/backward/step.
+            Set to False when called from MCWSOM to allow combined loss backpropagation.
 
         Returns:
         --------
 
-        Returns the euclidean distance of the SOM's matrix before and after training. Gives an indication of the impact of the added training points on the map.
+        Returns (map_dist, count, loss) where map_dist is the mean distance between
+        the map before and after training, count is the number of valid points processed,
+        and loss is the weight loss tensor.
         """
-        if type(x) != torch.Tensor: raise TypeError("x should be a tensor of shape (N,dim)")
+        if not isinstance(x, torch.Tensor): raise TypeError("x should be a tensor of shape (N,dim)")
         if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
         if x.size()[1] != self.dim: raise ValueError("x should be a tensor of shape (N,dim)")
         prev_som = self.somap.clone().detach()
-        optimizer.zero_grad()
+        if step:
+            optimizer.zero_grad()
         self.zero_grad()
         self.somap.detach_()
         count = 0
         bmus, dists = self(x)
         for i,x_k in enumerate(x):
-            if x_k.isnan().any() or x_k.isinf().any(): continue # do not try to add vector containing nans ! 
+            if x_k.isnan().any() or x_k.isinf().any(): continue # do not try to add vector containing nans !
             count+=1
             # decreases linearly...
             nb = max(self.neighborhood_drate, self.neighborhood_init - (self.step*self.neighborhood_drate))
             alpha = max(self.alpha_drate, self.alpha_init - (self.step*self.alpha_drate))
             self.step += 1
-            #bmu, dist = self(x_k.view(-1, x_k.size()[0]))
-            #bmu = bmu[0]
             theta = self.neighborhood_fct(bmus[i], (self.xs, self.ys), self.coord, nb)
             ntheta = theta.view(-1, theta.size(0)).T
-            wx_k = x_k * self.weights # Not used...: as for forward, update on x so keep the centroid instead of the weighted one...
-            # TODO: print(ntheta) prob is that neg ones get to quickly neg and then go to infinity...
-            # self.somap = self.somap + ntheta*(alpha*(wx_k-self.somap))
             self.somap = self.somap + ntheta*(alpha*(x_k - self.somap))
-            if torch.isnan(self.somap).any() or torch.isinf(self.somap).any(): 
+            if torch.isnan(self.somap).any() or torch.isinf(self.somap).any():
                 print("*** Nan! ***")
                 print("bmu", bmus[i])
                 print("theta", theta.min(), theta.max(), theta.mean(), theta.isnan().any())
                 print("ntheta", ntheta.min(), ntheta.max(), ntheta.mean(), ntheta.isnan().any())
                 print("alpha", alpha)
-                print("x_k", x_k.min(), x_k.max(), x_k.mean(), x_k.isnan().any())    
-                print("weights", self.weights)    
-        # loss = (1-(torch.min(dists, 0).values/torch.mean(dists, 0))).mean() # loss = how much smaller is the distance of the bmu compared to avg
+                print("x_k", x_k.min(), x_k.max(), x_k.mean(), x_k.isnan().any())
+                print("weights", self.weights)
         self.last_bmus_ = bmus
         self.last_dist_ = dists
         loss = self.loss(dists)
-        # contrastive loss: (1-Y) * (dists**2) + Y * (torch.clamp(1 - dists, min=0)**2)
-        # with Y = 1 if the point similar
-        # if we take Y as distance in the map (normalised by max distance), i.e. distance between the two corners
-        # we only need the first part of the loss
-        # i.e. sum on i (cells) of (1-mapdistance(i,bmu)) * (weighted_centroid_distance(i, bmu)**2)
-        loss.backward() 
-        optimizer.step()
-        # TODO: should also return the distance between batch and map
+        if step:
+            loss.backward()
+            optimizer.step()
         return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count, loss
 
 class MCWSOM(torch.nn.Module):
     def __init__(self, *args, n_channels=3, channel_sim_loss_coef=1e-3, **kwargs):
-        super(MCWSOM, self).__init__() #*args, **kwargs)
-        self.n_channel = n_channels
+        super(MCWSOM, self).__init__()
+        self.n_channels = n_channels
         self.channel_wsoms = torch.nn.ModuleList([WSOM(*args, **kwargs) for _ in range(n_channels)])
         self.channel_sim_loss_coef = channel_sim_loss_coef
-        # TODO : perturber un peu les poids initiaux pour chaque channel
-        # not needed since the loss is computed in MCWSOM directly
         for wsom in self.channel_wsoms:
+            # perturb weights to avoid identical channels at initialisation
             wsom.weights = Parameter(wsom.weights + torch.randn_like(wsom.weights)*0.01)
-        #     wsom.other_channels = [cwsom for cwsom in self.channel_wsoms if cwsom != wsom]
-        #     wsom.original_loss = wsom.loss
-        #     wsom.loss = wsom.mcloss # does not seem to be called... 
-        #     wsom.channel_sim_loss_coef = channel_sim_loss_coef
-    
+            # shuffle somap to avoid identical channels at initialisation
+            wsom.somap = wsom.somap[torch.randperm(wsom.somap.size(0))]
+
     def to(self, device):
-        for wsom in self.channel_wsoms:
-            wsom.to(device)
+        for wsom in self.channel_wsoms: wsom.to(device)
         self.device = device
 
     def forward(self, x):
         channel_results = []
-        for wsom in self.channel_wsoms:
-            channel_results.append(wsom.forward(x))
+        for wsom in self.channel_wsoms: channel_results.append(wsom.forward(x))
         return channel_results
 
+    def channel_diversity_loss(self):
+        """Mean pairwise cosine similarity of sigmoid(weights) across channels.
+        Minimising this pushes channels toward orthogonal weight profiles."""
+        sim_total = 0.0
+        n_pairs = 0
+        for i in range(self.n_channels):
+            for j in range(i+1, self.n_channels):
+                sw_i = torch.sigmoid(self.channel_wsoms[i].weights)
+                sw_j = torch.sigmoid(self.channel_wsoms[j].weights)
+                cos_sim = torch.nn.functional.cosine_similarity(sw_i.unsqueeze(0), sw_j.unsqueeze(0))
+                sim_total = sim_total + cos_sim.squeeze()
+                n_pairs += 1
+        return sim_total / n_pairs
+
     def add(self, x, optimizer=None):
-        gdist, gcount, gloss = 0.0, 0, 0.0
+        """
+        Train all channels on the data points in x with a single optimizer step.
+        The total loss combines individual WSOM losses with a diversity term
+        that pushes channels toward different weight profiles.
+
+        Returns (mean_map_dist, mean_count, total_loss, diversity_loss).
+        """
+        optimizer.zero_grad()
+        gdist, gcount = 0.0, 0
+        wsom_loss = 0.0
         for wsom in self.channel_wsoms:
-            dist, count, loss = wsom.add(x, optimizer)
+            dist, count, loss = wsom.add(x, optimizer, step=False)
             gdist += dist
             gcount += count
-            gloss += loss
-        gloss = gloss / len(self.channel_wsoms)
-        wloss = 0.0
-        for i,wsom in enumerate(self.channel_wsoms):
-            for j,other in enumerate(self.channel_wsoms):
-                if i < j: wloss += (1 - cosine_distance(abs(wsom.weights).view(1,-1), abs(other.weights).view(1,-1))[0][0])
-        wloss = (wloss / (len(self.channel_wsoms)*(len(self.channel_wsoms)-1)))
-        #print(wloss)
-        #print(gloss)
-        gloss += self.channel_sim_loss_coef * wloss
-        return gdist/len(self.channel_wsoms), gcount/len(self.channel_wsoms), gloss       
-     
+            wsom_loss = wsom_loss + loss
+        wsom_loss = wsom_loss / self.n_channels
+        diversity_loss = self.channel_diversity_loss()
+        total_loss = wsom_loss + self.channel_sim_loss_coef * diversity_loss
+        total_loss.backward()
+        optimizer.step()
+        return gdist / self.n_channels, gcount // self.n_channels, total_loss, diversity_loss

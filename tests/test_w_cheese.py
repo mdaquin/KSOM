@@ -4,7 +4,7 @@ import pandas as pd
 import pygame
 from sklearn.decomposition import PCA
 import sys 
-sys.path.insert(0, "src/")
+sys.path.insert(0, "../src/")
 import ksom.ksom as ksom
 import torch
 import sys

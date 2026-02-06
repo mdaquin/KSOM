@@ -2,7 +2,7 @@ import sys
 
 if len(sys.argv) < 3:
      print("No image or map size provided, default parameters (chica.jpg, 6) will be used.")
-     img = "tests/chica.jpg"
+     img = "chica.jpg"
      som_size = 6
 else: 
     img = sys.argv[1]

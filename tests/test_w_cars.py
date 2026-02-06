@@ -4,7 +4,7 @@ import pandas as pd
 import pygame
 from sklearn.decomposition import PCA
 import sys 
-sys.path.insert(0, "src/")
+sys.path.insert(0, "../src/")
 import ksom.ksom as ksom
 import torch
 import sys
@@ -77,7 +77,7 @@ surface = pygame.display.set_mode((screen_size*2,screen_size))
 
 NBEPOCH = 5
 BATCHSIZE = 256
-SOMSIZE = 5
+SOMSIZE = 10
 DIST = ksom.cosine_distance
 LR = 1e-2
 alpha = 1e-2

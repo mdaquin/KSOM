@@ -3,8 +3,8 @@ import time
 import pandas as pd
 import pygame
 from sklearn.decomposition import PCA
-import sys 
-sys.path.insert(0, "src/")
+import sys
+sys.path.insert(0, "../src/")
 import ksom.ksom as ksom
 import torch
 import sys
@@ -21,7 +21,7 @@ def findLabel(i, map, labels):
      if map.mean(dim=0)[idx] > map[i][idx]: lab = "not "+lab
      return lab
 
-def display(map, xoffset=0, labels=None, label_offset=0):
+def display(map, som_size, xoffset=0, yoffset=0, labels=None, label_offset=0):
     if map.shape[1] > 3:
         pca = PCA(n_components=3)
         somap = pca.fit_transform(map.detach())
@@ -30,17 +30,17 @@ def display(map, xoffset=0, labels=None, label_offset=0):
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-    unit = int(screen_size/smodel.xs)
+    unit = int(channel_size/som_size)
     for i,cs in enumerate(somap):
-        x = int(i/smodel.xs)
-        y = i%smodel.xs
+        x = int(i/som_size)
+        y = i%som_size
         x = (x*unit)+xoffset
-        y = y*unit
-        try : 
+        y = (y*unit)+yoffset
+        try :
             color = (max(min(255, int(cs[0]*255)), 0),
                      max(min(255, int(cs[1]*255)), 0),
                      max(min(255, int(cs[2]*255)), 0))
-        except: 
+        except:
             print(cs*255)
             sys.exit(-1)
         pygame.draw.rect(surface,
@@ -71,30 +71,35 @@ df = df.dropna()
 scaler = MinMaxScaler()
 df[df.columns] = scaler.fit_transform(df[df.columns])
 
-screen_size=300 # size of screen 
-pygame.init()
-surface = pygame.display.set_mode((screen_size*2,screen_size))
-
-NBEPOCH = 1
+NBEPOCH = 3
 BATCHSIZE = 256
-SOMSIZE = 5
+SOMSIZE = 3
 DIST = ksom.cosine_distance
 LR = 1e-2
 alpha = 1e-2
 alpha_drate = 5e-8
 sparcity_coeff = 1e-2
-nchannels = 3
-channel_sim_loss_coef = 1e-3
+nchannels = 4
+channel_sim_loss_coef = 1e-2
 
+# layout: channels in a grid, each channel shows SOM + frequency map side by side
+channel_size = 300
+grid_cols = min(nchannels, 2)
+grid_rows = math.ceil(nchannels / grid_cols)
+screen_width = grid_cols * channel_size * 2
+screen_height = grid_rows * channel_size
+
+pygame.init()
+surface = pygame.display.set_mode((screen_width, screen_height))
 pygame.font.init()
-font = pygame.font.SysFont('Courrier',int((screen_size/6)/5))
+font = pygame.font.SysFont('Courrier', int((channel_size/SOMSIZE)/5))
 
-smodel = ksom.MCWSOM(SOMSIZE, SOMSIZE, 
-                  len(df.T), 
-                  # zero_init=True, 
+smodel = ksom.MCWSOM(SOMSIZE, SOMSIZE,
+                  len(df.T),
+                  # zero_init=True,
                   sample_init=torch.Tensor(df.sample(SOMSIZE*SOMSIZE, random_state=42).to_numpy()),
-                  dist=DIST, alpha_drate=alpha_drate, alpha_init=alpha, 
-                  sparcity_coeff=sparcity_coeff, 
+                  dist=DIST, alpha_drate=alpha_drate, alpha_init=alpha,
+                  sparcity_coeff=sparcity_coeff,
                   n_channels=nchannels,
                   channel_sim_loss_coef=channel_sim_loss_coef)
 
@@ -114,18 +119,21 @@ for epoch in range(NBEPOCH):
     sloss = 0
     freqmaps = [torch.zeros(SOMSIZE*SOMSIZE) for _ in range(nchannels)]
     for b in range(math.ceil(len(df)/BATCHSIZE)):
-        dist,count,loss = smodel.add(torch.Tensor(df.iloc[b*BATCHSIZE:(b+1)*BATCHSIZE].to_numpy()), optimizer)
-        print(f"{epoch+1:02d}.{b:02d}: distance {dist:.6f} out of {count} objects, loss={loss:.6f}")
+        dist,count,loss,wloss = smodel.add(torch.Tensor(df.iloc[b*BATCHSIZE:(b+1)*BATCHSIZE].to_numpy()), optimizer)
+        print(f"{epoch+1:02d}.{b:02d}: distance {dist:.6f} out of {count} objects, loss={loss:.6f}, wloss={wloss:.6f}")
         sdist += dist
-        sloss += loss 
+        sloss += loss
         bmus_dists = smodel(torch.Tensor(df.iloc[b*BATCHSIZE:(b+1)*BATCHSIZE].to_numpy()))
         for c in range(nchannels):
             bmu = bmus_dists[c][0]
             for i in bmu: freqmaps[c][i[0]*SOMSIZE+i[1]] += 1
             ffreqmap = (freqmaps[c] - freqmaps[c].min())/(freqmaps[c].max()-freqmaps[c].min())
-            # freqmap = freqmap.view(len(freqmap), 1).repeat((1,3))
-            #display(ffreqmap.view(len(freqmaps[c]), 1).repeat((1,3)), xoffset=screen_size)
-            #display(smodel.somap, labels=list(df.columns), label_offset=screen_size)
+            col = c % grid_cols
+            row = c // grid_cols
+            xoff = col * channel_size * 2
+            yoff = row * channel_size
+            display(smodel.channel_wsoms[c].somap, SOMSIZE, xoffset=xoff, yoffset=yoff, labels=list(df.columns), label_offset=channel_size)
+            display(ffreqmap.view(len(freqmaps[c]), 1).repeat((1,3)), SOMSIZE, xoffset=xoff + channel_size, yoffset=yoff)
     print(f"Final {epoch+1:02d}: distance {sdist/(math.ceil(len(df)/BATCHSIZE)):.6f}, loss={sloss/(math.ceil(len(df)/BATCHSIZE)):.6f}")
 
 
@@ -134,15 +142,23 @@ iweights = []
 for i, wsom in enumerate(smodel.channel_wsoms):
     iweights.append({c: float(wsom.weights[j]) for j, c in enumerate(df.columns)})
     iweights[i] = dict(sorted(iweights[i].items(), key=lambda item: item[1], reverse=True))
-    for k, v in iweights[i].items(): print(f"{k}: {v:.4f}")
+    for k, v in iweights[i].items(): print(f"{k}: {v:.4f} torch.sigmoid({v:.4f})={torch.sigmoid(torch.Tensor([v]))[0]:.4f}")
     print("="*50)
+
+## Final display
+for c in range(nchannels):
+    col = c % grid_cols
+    row = c // grid_cols
+    xoff = col * channel_size * 2
+    yoff = row * channel_size
+    display(smodel.channel_wsoms[c].somap, SOMSIZE, xoffset=xoff, yoffset=yoff, labels=list(df.columns), label_offset=channel_size)
+    ffreqmap = (freqmaps[c] - freqmaps[c].min())/(freqmaps[c].max()-freqmaps[c].min())
+    display(ffreqmap.view(len(freqmaps[c]), 1).repeat((1,3)), SOMSIZE, xoffset=xoff + channel_size, yoffset=yoff)
 
 # continue to keep the display alive
 while True:
     for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                sys.exit()    
+                sys.exit()
     time.sleep(0.1)
-    pygame.display.flip()    
-    pygame.display.update()
