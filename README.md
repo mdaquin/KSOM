@@ -1,16 +1,18 @@
 # KSOM - Simple, but relatively efficient, pytorch-based self organising map
 
-This is a simple implementation of self-organising map training in python, using pytorch for efficiency. This enables to create, train and apply square maps of potentially high dimensions on CPU or GPU.
+This is a simple implementation of self-organising map training in python, using pytorch for efficiency. This enables to create, train and apply maps of potentially high dimensions on CPU or GPU.
 
 Three model classes are provided:
 - **SOM**: standard self-organising map
-- **WSOM**: weighted SOM with learnable per-feature weights, optimised through a combination of distance-based and L2 sparsity loss
+- **WSOM**: weighted SOM with learnable per-feature weights, optimised through a combination of distance-based and entropy-based sparsity loss
 - **MCWSOM**: multi-channel weighted SOM, creating multiple WSOM channels with a diversity loss that pushes each channel toward different feature weightings
 
 To install, use
 ```
 pip install ksom
 ```
+
+Maps are created with a number of rows and columns (`SOM(xs, ys, dim)`), which don't have to be equal. All the classes, distance functions and neighbourhood functions can be imported directly from `ksom`.
 
 ## SOM Example
 
@@ -35,6 +37,8 @@ for i in range(int(x.size()[0]/1000)):
     dist,count = smodel.add(x[idx]) # feed the SOM a batch of 1000 pixels
     print(f"{(i+1):06d}K - {dist:.4f} - {(time.time()-time1)*1000:05.2f}ms")
 ```
+
+The learning rate and the neighbourhood radius decay for every data point, so their decay rates should be set from the total number of points the map will see: about ``alpha_init / total`` for ``alpha_drate`` and ``(neighborhood_init - final_radius) / total`` for ``neighborhood_drate``. If the rates are too small for the amount of data, the radius barely shrinks and much of the map goes unused.
 
 The results on the image on the left looks like the map on the right, where each unit is represented by the colour corresponding to its weights.
 
@@ -64,6 +68,8 @@ for epoch in range(n_epochs):
     dist, count, loss = smodel.add(batch, optimizer)
 ```
 
+The sparsity term is the entropy of the normalised feature weights, and ``smodel.effective_features()`` gives roughly how many features carry the weight. Very small values of ``sparcity_coeff`` have little effect, and the value needed for a strong one depends on the data, typically between ``0.1`` and ``1.0``. On data with one-hot encoded columns, the learned weights tend to concentrate on those columns, and most of the map can then go unused, especially with a strong sparsity term. Check how many units are used as best matches when working with such data.
+
 ## MCWSOM Example
 
 The MCWSOM (Multi-Channel Weighted SOM) creates multiple WSOM channels, each learning different feature weightings. A diversity loss (cosine similarity between channel weights) encourages complementary views. See ``tests/test_mcw_cars.py`` for a full example.
@@ -84,3 +90,5 @@ smodel.train()
 for epoch in range(n_epochs):
     dist, count, total_loss, diversity_loss = smodel.add(batch, optimizer)
 ```
+
+``channel_sim_loss_coef`` controls how different the channels become: with small values such as ``1e-2``, they stay fairly similar. ``smodel.channel_wsoms`` gives access to the individual WSOMs, for example to read their ``weights`` or ``effective_features()``.

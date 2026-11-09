@@ -30,7 +30,7 @@ def nb_ricker(node, dims, coord, nb):
     # if nb < 1.0: nb = 1.0 # seem to make no difference...
     nodes = node.repeat(dims[0]*dims[1], 1)
     dist = torch.nn.functional.pairwise_distance(nodes, coord)
-    dist[int(node[0]*dims[0])+node[1]%dims[0]] = 0.0
+    dist[int(node[0]*dims[1])+node[1]] = 0.0
     FM = (math.sqrt(6)/(math.pi*(2*nb)))/math.sqrt(3)
     fbit = (1-2*math.pi**2*FM**2*dist**2)
     sbit = -math.pi**2*FM**2*dist**2
@@ -47,7 +47,7 @@ def nb_gaussian(node, dims, coord, nb):
     # exp(-(x/(nb/2))**2)
     nodes = node.repeat(dims[0]*dims[1], 1)
     dist = torch.nn.functional.pairwise_distance(nodes, coord)
-    dist[int(node[0]*dims[0])+node[1]%dims[0]] = 0.0
+    dist[int(node[0]*dims[1])+node[1]] = 0.0
     ret = torch.exp(-(dist/(nb/2))**2)
     ret[ret < 0] = 0.0
     return ret    
@@ -68,7 +68,7 @@ def nb_linear(node, dims, coord, nb):
     the function returns 0)."""
     nodes = node.repeat(dims[0]*dims[1], 1)
     dist = torch.nn.functional.pairwise_distance(nodes, coord)
-    dist[int(node[0]*dims[0])+node[1]%dims[0]] = 0.0
+    dist[int(node[0]*dims[1])+node[1]] = 0.0
     ret = 1-(dist/nb)
     ret[ret < 0] = 0.0
     return ret
@@ -143,7 +143,7 @@ See https://github.com/mdaquin/KSOM/blob/main/tests/test_img.py for an example o
         self.neighborhood_fct = neighborhood_fct
         self.alpha_init  = alpha_init
         self.alpha_drate = alpha_drate
-        lx = torch.arange(xs).repeat(ys).view(-1, ys).T.reshape(xs*ys)
+        lx = torch.arange(xs).repeat_interleave(ys)
         ly = torch.arange(ys).repeat(xs)
         self.coord = torch.stack((lx,ly), -1).to(device)
         self.device = device # so we can have the info in subclasses
@@ -179,7 +179,7 @@ See https://github.com/mdaquin/KSOM/blob/main/tests/test_img.py for an example o
         return torch.stack((bmu_ind_x, bmu_ind_y), -1), dists
 
     def __1DIndexTo2DIndex(self, ind):
-        return torch.Tensor([int(ind/self.xs), ind%self.xs])
+        return torch.Tensor([int(ind/self.ys), ind%self.ys])
     
     def add(self, x):
         """
@@ -193,7 +193,7 @@ See https://github.com/mdaquin/KSOM/blob/main/tests/test_img.py for an example o
         Returns:
         --------
 
-        Returns the euclidean distance of the SOM's matrix before and after training. Gives an indication of the impact of the added training points on the map.
+        Returns (map_dist, count), where map_dist is the mean euclidean distance between the SOM's units before and after training, which gives an indication of the impact of the added training points on the map, and count is the number of valid points processed. If return_dist is True, also returns the mean BMU distance for the batch.
         """
         if not isinstance(x, torch.Tensor): raise TypeError("x should be a tensor of shape (N,dim)")
         if len(x.size()) != 2: raise ValueError("x should be a tensor of shape (N,dim)")
@@ -234,6 +234,22 @@ See https://github.com/mdaquin/KSOM/blob/main/tests/test_img.py for an example o
         return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count
 
 class WSOM(SOM):
+    """
+    Self-organising map that also learns a weight for each feature. The units and data points are multiplied by sigmoid(weights) when computing distances, while the units themselves are kept and updated unweighted. The weights are trained by an optimizer passed to add(). The loss combines the ratio between each point's distance to its BMU and its mean distance to all units, with a sparsity term based on the entropy of the normalised sigmoid(weights).
+
+Parameters:
+-----------
+
+Takes the same parameters as SOM, and:
+
+sparcity_coeff (default: 1e-3): multiplier for the sparsity term, which is scaled to [0, 1]. Very small values have little effect, and the value needed for a strong one depends on the data, typically between 0.1 and 1.0.
+
+Example:
+--------
+
+See https://github.com/mdaquin/KSOM/blob/main/tests/test_w_cars.py for an example of the use of WSOM on a dataset of cars.
+    """
+
     def __init__(self, *args, sparcity_coeff=1e-3, **kwargs):
         super(WSOM, self).__init__(*args, **kwargs)
         factory_kwargs = {"device": self.device, "dtype": None}
@@ -272,13 +288,25 @@ class WSOM(SOM):
         bmu_ind_y = bmu_ind%self.ys
         return torch.stack((bmu_ind_x, bmu_ind_y), -1), dists
 
-    def loss(self, dists): 
-        distance_loss = 1- ( (torch.mean(dists, 0) - torch.min(dists, 0).values) / torch.mean(dists, 0) ).mean()
-        # L1_sparcity = torch.sum(torch.abs(self.weights)) # TODO : make it an option 
-        L2_sparcity = torch.sum(self.weights**2) / len(self.weights)
-        # diff_sparcity = -torch.std(self.weights)
-        # total loss is distance loss - spacity loss (we want to maximise spacity,
-        return distance_loss + self.sparcity_coeff * L2_sparcity
+    def weight_entropy(self):
+        """Entropy of sigmoid(weights) normalised to sum to 1. It depends only on the
+        balance between features, not their overall scale, like the distance loss."""
+        p = torch.sigmoid(self.weights)
+        p = p / p.sum()
+        return -(p * torch.log(p + 1e-12)).sum()
+
+    def effective_features(self):
+        """Roughly how many features carry the weight, from 1 to dim."""
+        return float(torch.exp(self.weight_entropy()))
+
+    def loss(self, dists):
+        mean_dists = torch.mean(dists, 0)
+        # epsilon: distances can all approach 0 under cosine if weight concentrates on one feature
+        distance_loss = 1- ( (mean_dists - torch.min(dists, 0).values) / (mean_dists + 1e-12) ).mean()
+        if self.dim < 2: return distance_loss # a single feature has no balance to sparsify
+        # entropy scaled to [0, 1], so it is lowest when few features carry the weight
+        sparcity_loss = self.weight_entropy() / math.log(self.dim)
+        return distance_loss + self.sparcity_coeff * sparcity_loss
 
     def add(self, x, optimizer=None, step=True):
         """
@@ -338,6 +366,24 @@ class WSOM(SOM):
         return float(torch.nn.functional.pairwise_distance(prev_som, self.somap).mean()), count, loss
 
 class MCWSOM(torch.nn.Module):
+    """
+    Multi-channel weighted self-organising map: several WSOMs (channels) trained on the same data, available in channel_wsoms. A diversity term in the loss pushes the channels towards different feature weights, so that they give complementary views of the data.
+
+Parameters:
+-----------
+
+Takes the same parameters as WSOM, which apply to each channel, and:
+
+n_channels (default: 3): number of channels.
+
+channel_sim_loss_coef (default: 1e-3): multiplier for the diversity term, the mean pairwise cosine similarity between the channels' sigmoid(weights). Small values leave the channels fairly similar.
+
+Example:
+--------
+
+See https://github.com/mdaquin/KSOM/blob/main/tests/test_mcw_cars.py for an example of the use of MCWSOM on a dataset of cars.
+    """
+
     def __init__(self, *args, n_channels=3, channel_sim_loss_coef=1e-3, **kwargs):
         super(MCWSOM, self).__init__()
         self.n_channels = n_channels

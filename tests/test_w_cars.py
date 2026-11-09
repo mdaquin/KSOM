@@ -51,8 +51,8 @@ def display(map, xoffset=0, labels=None, label_offset=0):
              cp = surface.get_at((int(x+label_offset+unit/20),y+int(unit/5)))
              cl = (200, 200, 200)
              if cp[0] > 100 : cl = (0, 0, 0)
-             texts = font.render(lab, False, cl)
-             surface.blit(texts, (x+label_offset+unit/20,y+int(unit/5)))
+             # texts = font.render(lab, False, cl)
+             # surface.blit(texts, (x+label_offset+unit/20,y+int(unit/5)))
 
     pygame.display.flip()
     pygame.display.update()
@@ -84,8 +84,8 @@ alpha = 1e-2
 alpha_drate = 5e-8
 sparcity_coeff = 1e-2
 
-pygame.font.init()
-font = pygame.font.SysFont('Courrier',int((screen_size/6)/5))
+# pygame.font.init()
+# font = pygame.font.SysFont('Courrier',int((screen_size/6)/5))
 
 smodel = ksom.WSOM(SOMSIZE, SOMSIZE, 
                   len(df.T), 
@@ -113,8 +113,8 @@ for epoch in range(NBEPOCH):
         bmu,dists = smodel(torch.Tensor(df.iloc[b*BATCHSIZE:(b+1)*BATCHSIZE].to_numpy()))
         for i in bmu: freqmap[i[0]*SOMSIZE+i[1]] += 1
         ffreqmap = (freqmap - freqmap.min())/(freqmap.max()-freqmap.min())
-        # freqmap = freqmap.view(len(freqmap), 1).repeat((1,3))
-        display(ffreqmap.view(len(freqmap), 1).repeat((1,3)), xoffset=screen_size)
+        #freqmap = freqmap.view(len(freqmap), 1).repeat((1,3))
+        #display(ffreqmap.view(len(freqmap), 1).repeat((1,3)), xoffset=screen_size)
         display(smodel.somap, labels=list(df.columns), label_offset=screen_size)
     print(f"Final {epoch+1:02d}: distance {sdist/(math.ceil(len(df)/BATCHSIZE)):.6f}, loss={sloss/(math.ceil(len(df)/BATCHSIZE)):.6f}")
 
