@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ksom"
-version = "0.10.0"
+version = "0.11.0"
 authors = [
   { name="Mathieu d'Aquin", email="mathieu.daquin.w+ksom@gmail.com" },
 ]
@@ -25,3 +25,6 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/mdaquin/ksom"
 Issues = "https://github.com/mdaquin/ksom/issues"
+
+[tool.hatch.build.targets.sdist]
+exclude = ["imgs", "tests", "dist"]

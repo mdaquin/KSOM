@@ -263,6 +263,7 @@ See https://github.com/mdaquin/KSOM/blob/main/tests/test_w_cars.py for an exampl
         self.somap = self.somap.to(device)
         self.coord = self.coord.to(device)
         self.weights = self.weights.to(device)
+        return self
     
     def forward(self, x):
         """
@@ -398,6 +399,7 @@ See https://github.com/mdaquin/KSOM/blob/main/tests/test_mcw_cars.py for an exam
     def to(self, device):
         for wsom in self.channel_wsoms: wsom.to(device)
         self.device = device
+        return self
 
     def forward(self, x):
         channel_results = []
